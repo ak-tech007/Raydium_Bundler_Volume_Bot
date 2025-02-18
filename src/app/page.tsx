@@ -3,10 +3,12 @@
 import { useEffect } from "react";
 import { WalletMultiButton, useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useWallet} from "@solana/wallet-adapter-react";
-import { useSession, signIn } from "next-auth/react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import bs58 from "bs58";
 import { getCsrfToken } from "next-auth/react";
 import { SigninMessage } from "@/utils/SigninMessage";
+import { createNewmint } from "@/utils/token";
+import CustomWalletButton from "./components/CustomWalletButton";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -40,21 +42,32 @@ export default function Home() {
     }
   };
 
+  const createMint = async () => {
+    // Your minting logic here
+    if (wallet.publicKey) {
+      createNewmint(wallet);
+    }
+  };
+
   // Auto-authenticate when wallet connects
   useEffect(() => {
     if (wallet.connected && status === "unauthenticated") {
       handleSignIn();
     }
-  }, [wallet.connected]);
+    if (!wallet.connected && session) {
+      signOut();
+    }
+  }, [wallet.connected,]);
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen space-y-4">
-      <div className="border hover:border-slate-900 rounded p-4">
-        <div onClick={handleSignIn}>kkk</div>
-        <WalletMultiButton />
-      </div>
-      {session ? (
+      
+        <CustomWalletButton />
+      
+      {session ? (<>
         <p className="text-green-600">✅ Signed in as {session.user?.name}</p>
+        <button onClick={() => createMint()}>createMint</button>
+        </>
       ) : (
         <p className="text-red-600">❌ Not signed in</p>
       )}
