@@ -6,6 +6,7 @@ import { useWallet} from "@solana/wallet-adapter-react";
 import { useSession, signIn } from "next-auth/react";
 import bs58 from "bs58";
 import { getCsrfToken } from "next-auth/react";
+import { SigninMessage } from "@/utils/SigninMessage";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -18,16 +19,21 @@ export default function Home() {
       const csrf = await getCsrfToken();
       console.log("csrf", csrf);
       if (!wallet.publicKey || !csrf || !wallet.signMessage) return;
-      
-      const message = `Sign this message to log in.\n\nNonce: ${csrf}`;
-      const encodedMessage = new TextEncoder().encode(message);
-      const signature = await wallet.signMessage(encodedMessage);
+
+      const message = new SigninMessage({
+        domain: window.location.host,
+        publicKey: wallet.publicKey?.toBase58(),
+        statement: `Sign this message to sign in to the app.`,
+        nonce: csrf,
+      });
+      const data = new TextEncoder().encode(message.prepare());
+      const signature = await wallet.signMessage(data);
       const serializedSignature = bs58.encode(signature);
 
-      await signIn("credentials", {
-        message,
+      signIn("credentials", {
+        message: JSON.stringify(message),
+        redirect: false,
         signature: serializedSignature,
-        redirect: false, // Prevents redirect, keeps user on the same page
       });
     } catch (error) {
       console.error("Sign-in error:", error);
@@ -37,10 +43,9 @@ export default function Home() {
   // Auto-authenticate when wallet connects
   useEffect(() => {
     if (wallet.connected && status === "unauthenticated") {
-      console.log("wallet connected")
       handleSignIn();
     }
-  }, [wallet.connected, status]);
+  }, [wallet.connected]);
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen space-y-4">

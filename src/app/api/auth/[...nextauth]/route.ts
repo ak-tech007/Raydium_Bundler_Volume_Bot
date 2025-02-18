@@ -22,7 +22,7 @@ const handler = NextAuth({
             return null;
           }
 
-          const csrfToken = await getCsrfToken({ req });
+          const csrfToken = await getCsrfToken({ req: { ...req, body: null } });
 
           if (signinMessage.nonce !== csrfToken) {
             return null;
