@@ -53,7 +53,7 @@ export default function Home() {
   const createMint = async () => {
     // Your minting logic here
     if (wallet.publicKey) {
-      const result = await createNewmint(wallet);
+      const result = await createNewmint(wallet, 10000000000);
       if (result && result.sign) {
         setTransaction(result.sign);
       }
