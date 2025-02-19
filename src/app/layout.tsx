@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -32,10 +31,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AppSessionProvider>
-        <AppWalletProvider >
-        <Toaster position="bottom-right" reverseOrder={false} />
-          {children}
-        </AppWalletProvider>
+          <AppWalletProvider>
+            <Toaster position="bottom-right" reverseOrder={false} />
+            {children}
+          </AppWalletProvider>
         </AppSessionProvider>
       </body>
     </html>
