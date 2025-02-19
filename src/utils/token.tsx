@@ -83,8 +83,6 @@ export const createNewmint = async (wallet: any, amount: number) => {
     if (wallet.signTransaction) {
       const signedTransaction = await wallet.signTransaction(transaction);
 
-      // Log the signed transaction
-      console.log("Signed transaction:", signedTransaction);
       signedTransaction.partialSign(mintAccount);
 
       // Send the signed transaction
