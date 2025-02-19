@@ -25,7 +25,6 @@ export default function Home() {
   const handleSignIn = async () => {
     try {
       const csrf = await getCsrfToken();
-      console.log("csrf", csrf);
       if (!wallet.publicKey || !csrf || !wallet.signMessage) {
         toast.error("Wallet not connected.");
         return;
@@ -64,6 +63,7 @@ export default function Home() {
       if (result && result.tokenMintAccount) {
         setMint(result.tokenMintAccount);
       }
+      toast.success("Token minted successfully!");
     }
   };
   useEffect(() => {
