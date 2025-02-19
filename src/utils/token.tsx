@@ -59,16 +59,14 @@ export const createNewmint = async (wallet: any) => {
         const rawTransaction = signedTransaction.serialize();
         const signature = await connection.sendRawTransaction(rawTransaction);
 
-        // Log the transaction signature
-        console.log("Transaction sent. Signature:", signature);
-
         // Confirm the transaction
         const confirmation = await connection.confirmTransaction(signature);
-        console.log("Transaction confirmed:", confirmation);
 
         // Optionally, check the transaction status
         const transactionStatus = await connection.getTransaction(signature);
-        console.log("Transaction status:", transactionStatus);
+        return {tokenMintAccount: mintAccount.publicKey.toString(),
+            sign: signature
+        };
         } else {
             throw new Error("Wallet does not support signing transactions");
         }
