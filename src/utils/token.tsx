@@ -1,10 +1,11 @@
 'use client'
 import {
 createInitializeMint2Instruction,
-    createInitializeMintInstruction,
     getMinimumBalanceForRentExemptMint,
     MINT_SIZE,
-    TOKEN_PROGRAM_ID,
+    getAssociatedTokenAddressSync,
+    createAssociatedTokenAccountInstruction,
+    createMintToInstruction
 } from "@solana/spl-token";
 import {
     clusterApiUrl,
@@ -13,23 +14,32 @@ import {
     PublicKey,
     SystemProgram,
     Transaction,
+    
 } from "@solana/web3.js";
 
     
     
     
-export const createNewmint = async (wallet: any) => {
+export const createNewmint = async (wallet: any, amount: number) => {
     try {
         // Establish connection to Solana devnet
         const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
         const phantomPublicKey = wallet.publicKey;
 
         const programId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
         const decimals = 6;
         const lamports = await getMinimumBalanceForRentExemptMint(connection);
 
         // Generate a new keypair for the mint account
         const mintAccount = Keypair.generate();
+        const associatedToken = await getAssociatedTokenAddressSync(
+            mintAccount.publicKey,
+            wallet.publicKey,
+            false,
+            programId,
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+        );
 
         const transaction = new Transaction().add(
             SystemProgram.createAccount({
@@ -40,6 +50,15 @@ export const createNewmint = async (wallet: any) => {
                 programId,
             }),
             createInitializeMint2Instruction(mintAccount.publicKey, decimals, phantomPublicKey, phantomPublicKey, programId),
+            createAssociatedTokenAccountInstruction(
+                wallet.publicKey,
+                associatedToken,
+                wallet.publicKey,
+                mintAccount.publicKey,
+                programId,
+                ASSOCIATED_TOKEN_PROGRAM_ID,
+            ),
+            createMintToInstruction(mintAccount.publicKey, associatedToken, wallet.publicKey, amount, [], programId)
         );
 
         // Set the recent blockhash and fee payer
@@ -62,8 +81,6 @@ export const createNewmint = async (wallet: any) => {
         // Confirm the transaction
         const confirmation = await connection.confirmTransaction(signature);
 
-        // Optionally, check the transaction status
-        const transactionStatus = await connection.getTransaction(signature);
         return {tokenMintAccount: mintAccount.publicKey.toString(),
             sign: signature
         };
