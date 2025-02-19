@@ -45,6 +45,7 @@ export default function Home() {
         redirect: false,
         signature: serializedSignature,
       });
+      toast.success("Signed in successfully!");
     } catch (error: unknown) {
       if (error instanceof Error) {
         toast.error(error.message);
