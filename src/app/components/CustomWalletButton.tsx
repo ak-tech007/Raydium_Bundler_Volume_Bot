@@ -29,13 +29,14 @@ export default function CustomWalletButton() {
   }, [publicKey, connection]);
 
   return (
-    <div className="flex items-center space-x-4 border border-gray-300 px-4 py-2 rounded-lg">
-      <WalletMultiButton />
-      {publicKey && balance !== null && (
-        <span className="text-lg font-medium text-gray-800">
-          {balance.toFixed(2)} SOL
-        </span>
-      )}
-    </div>
+    <div className="flex items-center space-x-4 p-2 bg-white rounded-xl shadow-md">
+  <WalletMultiButton className="!bg-blue-600 !text-white !rounded-lg !px-4 !py-2 !shadow-lg hover:!bg-blue-700 transition duration-300" />
+  {publicKey && balance !== null && (
+    <span className="px-3 py-1 text-lg font-semibold text-white bg-green-500 rounded-full shadow-sm">
+      {balance.toFixed(2)} SOL
+    </span>
+  )}
+</div>
+
   );
 }
