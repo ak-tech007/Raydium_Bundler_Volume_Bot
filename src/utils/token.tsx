@@ -6,6 +6,8 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  createSetAuthorityInstruction,
+  AuthorityType,
 } from "@solana/spl-token";
 import {
   clusterApiUrl,
@@ -71,6 +73,20 @@ export const createNewmint = async (wallet: any, amount: number) => {
         amount,
         [],
         programId
+      ),
+      // 🔹 Revoke Mint Authority
+      createSetAuthorityInstruction(
+        mintAccount.publicKey,
+        wallet.publicKey, // Current authority
+        AuthorityType.MintTokens,
+        null // Setting to null removes authority
+      ),
+      // 🔹 Revoke Freeze Authority
+      createSetAuthorityInstruction(
+        mintAccount.publicKey,
+        wallet.publicKey, // Current authority
+        AuthorityType.FreezeAccount,
+        null // Setting to null removes authority
       )
     );
 
