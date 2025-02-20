@@ -30,6 +30,7 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
+import toast from "react-hot-toast";
 
 export const createNewmint = async (wallet: any, amount: number) => {
   try {
@@ -137,21 +138,25 @@ export const createNewmint = async (wallet: any, amount: number) => {
         amount,
         [],
         TOKEN_2022_PROGRAM_ID
+      ),
+      // 🔹 Revoke Mint Authority
+      createSetAuthorityInstruction(
+        mintAccount.publicKey,
+        wallet.publicKey, // Current authority
+        AuthorityType.MintTokens,
+        null, // Setting to null removes authority
+        [], // No multisigners
+        TOKEN_2022_PROGRAM_ID // Ensure we're using SPL-2022
+      ),
+      // 🔹 Revoke Freeze Authority
+      createSetAuthorityInstruction(
+        mintAccount.publicKey,
+        wallet.publicKey, // Current authority
+        AuthorityType.FreezeAccount,
+        null, // Setting to null removes authority
+        [], // No multisigners
+        TOKEN_2022_PROGRAM_ID // Ensure we're using SPL-2022
       )
-      // // 🔹 Revoke Mint Authority
-      // createSetAuthorityInstruction(
-      //   mintAccount.publicKey,
-      //   wallet.publicKey, // Current authority
-      //   AuthorityType.MintTokens,
-      //   null // Setting to null removes authority
-      // ),
-      // // 🔹 Revoke Freeze Authority
-      // createSetAuthorityInstruction(
-      //   mintAccount.publicKey,
-      //   wallet.publicKey, // Current authority
-      //   AuthorityType.FreezeAccount,
-      //   null // Setting to null removes authority
-      // )
     );
 
     // Set the recent blockhash and fee payer
@@ -181,5 +186,10 @@ export const createNewmint = async (wallet: any, amount: number) => {
     }
   } catch (error: unknown) {
     console.error("Transaction failed:", error);
+    if (error instanceof Error) {
+      toast.error(error.message);
+    } else {
+      toast.error("An unknown error occurred");
+    }
   }
 };
