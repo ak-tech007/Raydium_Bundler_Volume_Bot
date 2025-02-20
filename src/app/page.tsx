@@ -61,11 +61,11 @@ export default function Home() {
       const result = await createNewmint(wallet, num * 1000000000);
       if (result && result.sign) {
         setTransaction(result.sign);
+        toast.success("Token minted successfully!");
       }
       if (result && result.tokenMintAccount) {
         setMint(result.tokenMintAccount);
       }
-      toast.success("Token minted successfully!");
     }
   };
   useEffect(() => {
