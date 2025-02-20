@@ -21,6 +21,7 @@ export default function Home() {
   const [transaction, setTransaction] = useState("");
   const [mint, setMint] = useState("");
   const [num, setNum] = useState(0);
+  const [isClient, setIsClient] = useState(false);
 
   const handleSignIn = async () => {
     try {
@@ -68,10 +69,13 @@ export default function Home() {
     }
   };
   useEffect(() => {
+    setIsClient(true);
     if (!wallet.connected && session) {
       signOut();
     }
   }, [wallet.connected]);
+
+  if (!isClient) return null;
 
   return (
     <>
