@@ -31,9 +31,34 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import toast from "react-hot-toast";
+import { PinataSDK } from "pinata-web3";
+import path from "path";
+import dotenv from "dotenv";
+dotenv.config();
 
-export const createNewmint = async (wallet: any, amount: number) => {
+export const createNewmint = async (MintDetail: {
+  wallet: any;
+  amount: number;
+  name: string;
+  symbol: string;
+  description: string;
+  image: string;
+  twitter: string;
+  telegram: string;
+  website: string;
+}) => {
   try {
+    const {
+      wallet,
+      amount,
+      name,
+      symbol,
+      description,
+      image,
+      twitter,
+      telegram,
+      website,
+    } = MintDetail;
     // Establish connection to Solana devnet
     const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
@@ -53,11 +78,36 @@ export const createNewmint = async (wallet: any, amount: number) => {
     // Generate a new keypair for the mint account
     const mintAccount = Keypair.generate();
 
+    const pinata = new PinataSDK({
+      pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
+      pinataGateway: process.env.NEXT_PUBLIC_PINATA_GATEWAY,
+    });
+
+    const metadataJSON = {
+      name: name,
+      symbol: symbol,
+      description: description,
+      image: image,
+      showName: true,
+      twitter: twitter,
+      telegram: telegram,
+      website: website,
+    };
+
+    // Convert JSON to Blob and create a File object
+    const metadataBlob = new Blob([JSON.stringify(metadataJSON)], {
+      type: "application/json",
+    });
+    const metadataFile = new File([metadataBlob], "metadata.json", {
+      type: "application/json",
+    });
+    const upload = await pinata.upload.file(metadataFile);
+
     const metadata: TokenMetadata = {
       mint: mintAccount.publicKey,
-      name: "Bundle-Coin",
-      symbol: "Bundle",
-      uri: "https://github.com/saidubundukamara/solana_meta_data/blob/main/metadata.json",
+      name: name,
+      symbol: symbol,
+      uri: `https://ipfs.io/ipfs/${upload.IpfsHash}`,
       additionalMetadata: [["description", "Only Possible On Solana"]],
     };
 
@@ -69,9 +119,6 @@ export const createNewmint = async (wallet: any, amount: number) => {
     const mintLamports = await connection.getMinimumBalanceForRentExemption(
       mintLen + metadataLen
     );
-
-    console.log("Mint Length:", mintLen);
-    console.log("Required Lamports:", mintLamports);
 
     const associatedToken = await getAssociatedTokenAddressSync(
       mintAccount.publicKey,
