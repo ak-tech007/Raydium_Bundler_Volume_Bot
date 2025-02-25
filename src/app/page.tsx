@@ -144,7 +144,7 @@ export default function Home() {
     if (wallet.publicKey) {
       const result = await createNewmint({
         wallet: wallet as any,
-        amount: num * 1000000000,
+        amount: num * 1000000,
         name: token_name,
         symbol: token_symbol,
         description: token_description,
