@@ -1667,7 +1667,7 @@
     semver "^7.3.8"
     superstruct "^1.0.3"
 
-"@metaplex-foundation/mpl-token-metadata@3.3.0":
+"@metaplex-foundation/mpl-token-metadata@^3.3.0":
   version "3.3.0"
   resolved "https://registry.npmjs.org/@metaplex-foundation/mpl-token-metadata/-/mpl-token-metadata-3.3.0.tgz"
   integrity sha512-t5vO8Wr3ZZZPGrVrGNcosX5FMkwQSgBiVMQMRNDG2De7voYFJmIibD5jdG05EoQ4Y5kZVEiwhYaO+wJB3aO5AA==
