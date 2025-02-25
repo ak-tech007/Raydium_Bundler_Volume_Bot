@@ -1,39 +1,33 @@
 "use client";
 import {
-  createInitializeMint2Instruction,
-  getMinimumBalanceForRentExemptMint,
-  MINT_SIZE,
-  getAssociatedTokenAddressSync,
-  createAssociatedTokenAccountInstruction,
-  createMintToInstruction,
   createSetAuthorityInstruction,
   AuthorityType,
-  createInitializeMetadataPointerInstruction,
-  TOKEN_2022_PROGRAM_ID,
-  ExtensionType,
-  getMintLen,
-  TYPE_SIZE,
-  LENGTH_SIZE,
-  createInitializeMintInstruction,
-  createInitializeTransferFeeConfigInstruction,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import {
-  createInitializeInstruction,
-  pack,
-  TokenMetadata,
-} from "@solana/spl-token-metadata";
 import {
   clusterApiUrl,
   Connection,
   Keypair,
   PublicKey,
-  SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 import toast from "react-hot-toast";
 import { PinataSDK } from "pinata-web3";
-import path from "path";
 import dotenv from "dotenv";
+import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  createFungible,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { generateSigner, percentAmount } from "@metaplex-foundation/umi";
+import {
+  createTokenIfMissing,
+  findAssociatedTokenPda,
+  getSplAssociatedTokenProgramId,
+  mintTokensTo,
+} from "@metaplex-foundation/mpl-toolbox";
+import { toWeb3JsInstruction } from "@metaplex-foundation/umi-web3js-adapters";
 dotenv.config();
 
 export const createNewmint = async (MintDetail: {
@@ -62,21 +56,18 @@ export const createNewmint = async (MintDetail: {
     // Establish connection to Solana devnet
     const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-    const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
-      "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-    );
+    const umi = createUmi("https://api.devnet.solana.com");
 
-    // Define the extensions to be used by the mint
-    const extensions = [
-      ExtensionType.TransferFeeConfig,
-      ExtensionType.MetadataPointer,
-    ];
+    // Register Wallet Adapter to Umi
+    umi.use(walletAdapterIdentity(wallet));
+    umi.use(mplTokenMetadata());
 
-    const decimals = 9;
-    const feeBasisPoints = 50;
-    const maxFee = BigInt(5_000);
-    // Generate a new keypair for the mint account
-    const mintAccount = Keypair.generate();
+    const mint = generateSigner(umi);
+
+    console.log("Mint:", mint);
+    console.log("Mint Public Key:", mint.publicKey);
+
+    const mintKeypair = Keypair.fromSecretKey(mint.secretKey);
 
     const pinata = new PinataSDK({
       pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -103,107 +94,59 @@ export const createNewmint = async (MintDetail: {
     });
     const upload = await pinata.upload.file(metadataFile);
 
-    const metadata: TokenMetadata = {
-      mint: mintAccount.publicKey,
+    const metadata = {
       name: name,
       symbol: symbol,
       uri: `https://ipfs.io/ipfs/${upload.IpfsHash}`,
-      additionalMetadata: [["description", "Only Possible On Solana"]],
     };
 
-    // Calculate the length of the mint
-    const mintLen = getMintLen(extensions);
+    const createFungibleIx = createFungible(umi, {
+      mint: mint,
+      name: name,
+      uri: metadata.uri, // we use the `metedataUri` variable we created earlier that is storing our uri.
+      sellerFeeBasisPoints: percentAmount(0),
+      decimals: 6, // set the amount of decimals you want your token to have.
+    }).getInstructions()[0];
 
-    const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+    const createTokenIx = createTokenIfMissing(umi, {
+      mint: mint.publicKey,
+      owner: umi.identity.publicKey,
+      ataProgram: getSplAssociatedTokenProgramId(umi),
+    }).getInstructions()[0];
 
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(
-      mintLen + metadataLen
+    const mintTokensIx = mintTokensTo(umi, {
+      mint: mint.publicKey,
+      token: findAssociatedTokenPda(umi, {
+        mint: mint.publicKey,
+        owner: umi.identity.publicKey,
+      }),
+      amount: BigInt(amount),
+    }).getInstructions()[0];
+
+    const revokeMintAuthIx = await createSetAuthorityInstruction(
+      new PublicKey(mint.publicKey),
+      wallet.publicKey, // Current authority
+      AuthorityType.MintTokens,
+      null, // Setting to null removes authority
+      [], // No multisigners
+      TOKEN_PROGRAM_ID // Ensure we're using SPL-2022
     );
 
-    const associatedToken = await getAssociatedTokenAddressSync(
-      mintAccount.publicKey,
-      wallet.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+    const revokeFreezeAuthIx = await createSetAuthorityInstruction(
+      new PublicKey(mint.publicKey),
+      wallet.publicKey, // Current authority
+      AuthorityType.FreezeAccount,
+      null, // Setting to null removes authority
+      [], // No multisigners
+      TOKEN_PROGRAM_ID // Ensure we're using SPL-2022
     );
 
     const transaction = new Transaction().add(
-      SystemProgram.createAccount({
-        fromPubkey: wallet.publicKey,
-        newAccountPubkey: mintAccount.publicKey,
-        space: mintLen,
-        lamports: mintLamports,
-        programId: TOKEN_2022_PROGRAM_ID,
-      }),
-
-      createInitializeTransferFeeConfigInstruction(
-        mintAccount.publicKey,
-        wallet.publicKey,
-        wallet.publicKey,
-        feeBasisPoints,
-        maxFee,
-        TOKEN_2022_PROGRAM_ID
-      ),
-      createInitializeMetadataPointerInstruction(
-        mintAccount.publicKey,
-        wallet.publicKey,
-        mintAccount.publicKey,
-        TOKEN_2022_PROGRAM_ID
-      ),
-
-      createInitializeMintInstruction(
-        mintAccount.publicKey,
-        decimals,
-        wallet.publicKey,
-        wallet.publicKey,
-        TOKEN_2022_PROGRAM_ID
-      ),
-
-      createInitializeInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        mint: mintAccount.publicKey,
-        metadata: metadata.mint,
-        name: metadata.name,
-        symbol: metadata.symbol,
-        uri: metadata.uri,
-        mintAuthority: wallet.publicKey,
-        updateAuthority: wallet.publicKey,
-      }),
-      createAssociatedTokenAccountInstruction(
-        wallet.publicKey,
-        associatedToken,
-        wallet.publicKey,
-        mintAccount.publicKey,
-        TOKEN_2022_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      ),
-      createMintToInstruction(
-        mintAccount.publicKey,
-        associatedToken,
-        wallet.publicKey,
-        amount,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      ),
-      // 🔹 Revoke Mint Authority
-      createSetAuthorityInstruction(
-        mintAccount.publicKey,
-        wallet.publicKey, // Current authority
-        AuthorityType.MintTokens,
-        null, // Setting to null removes authority
-        [], // No multisigners
-        TOKEN_2022_PROGRAM_ID // Ensure we're using SPL-2022
-      ),
-      // 🔹 Revoke Freeze Authority
-      createSetAuthorityInstruction(
-        mintAccount.publicKey,
-        wallet.publicKey, // Current authority
-        AuthorityType.FreezeAccount,
-        null, // Setting to null removes authority
-        [], // No multisigners
-        TOKEN_2022_PROGRAM_ID // Ensure we're using SPL-2022
-      )
+      toWeb3JsInstruction(createFungibleIx),
+      toWeb3JsInstruction(createTokenIx),
+      toWeb3JsInstruction(mintTokensIx),
+      revokeMintAuthIx,
+      revokeFreezeAuthIx
     );
 
     // Set the recent blockhash and fee payer
@@ -215,7 +158,7 @@ export const createNewmint = async (MintDetail: {
     if (wallet.signTransaction) {
       const signedTransaction = await wallet.signTransaction(transaction);
 
-      signedTransaction.partialSign(mintAccount);
+      signedTransaction.partialSign(mintKeypair);
 
       // Send the signed transaction
       const rawTransaction = signedTransaction.serialize();
@@ -225,11 +168,9 @@ export const createNewmint = async (MintDetail: {
       const confirmation = await connection.confirmTransaction(signature);
 
       return {
-        tokenMintAccount: mintAccount.publicKey.toString(),
+        tokenMintAccount: mint.publicKey,
         sign: signature,
       };
-    } else {
-      throw new Error("Wallet does not support signing transactions");
     }
   } catch (error: unknown) {
     console.error("Transaction failed:", error);
