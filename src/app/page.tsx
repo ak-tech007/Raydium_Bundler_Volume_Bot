@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import {
   WalletMultiButton,
   useWalletModal,
@@ -22,8 +22,10 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddress,
+  NATIVE_MINT,
 } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
+import { initializeNewPool } from "@/utils/pool";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -47,20 +49,14 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [initial_amount0, setInitialAmount0] = useState(0);
   const [initial_amount1, setInitialAmount1] = useState(0);
+  const [initialize_pool, setInitializePool] = useState("");
+  const [wsol_amount, setWsolAmount] = useState(0);
+  const [w_amount, setWAmount] = useState(0);
+
   const connection = new Connection(
     "https://api.devnet.solana.com",
     "confirmed"
   );
-  const provider = new AnchorProvider(
-    connection,
-    wallet as any,
-    AnchorProvider.defaultOptions()
-  );
-
-  const contractProgramId = new PublicKey(
-    "5nkUCxN2iFukZkE5yk2Z4HTxrPdwHZMmZskGzWcAfr1F"
-  ); // Replace with your program ID
-  const program = new Program(idl as any, contractProgramId, provider);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,9 +130,26 @@ export default function Home() {
   };
   const wrap_sol = async () => {
     if (wallet.publicKey) {
-      const result = await wrapSol(wallet);
+      await wrapSol(wallet, w_amount);
     }
   };
+  async function getWSOLBalance() {
+    if (wallet.publicKey) {
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        wallet.publicKey,
+        { mint: NATIVE_MINT }
+      );
+
+      if (tokenAccounts.value.length > 0) {
+        const balance =
+          tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
+        setWsolAmount(balance);
+      } else {
+        console.log("No WSOL account found.");
+        return 0;
+      }
+    }
+  }
   const createMint = async () => {
     // Your minting logic here
     if (wallet.publicKey) {
@@ -165,144 +178,24 @@ export default function Home() {
     if (!wallet.connected && session) {
       signOut();
     }
+    getWSOLBalance();
   }, [wallet.connected]);
 
   async function initialize_new_pool() {
-    try {
-      // Define all the required accounts
-      const programId = new PublicKey(
-        "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
-      );
-      const creator = wallet.publicKey;
-      if (!creator) {
-        throw new Error("Wallet public key is null");
-      }
-
-      const ammConfig = await connection.getProgramAccounts(programId, {
-        filters: [
-          {
-            dataSize: 236, // Data size of AmmConfig struct
-          },
-        ],
+    if (wallet.publicKey && mint) {
+      const tx = await initializeNewPool({
+        wallet,
+        mint,
+        initialAmount0: initial_amount0,
+        initialAmount1: initial_amount1,
       });
-      if (ammConfig.length === 0) {
-        throw new Error("No ammConfig account found.");
+      if (tx) {
+        setInitializePool(tx.toString());
+        toast.success("Pool initialized successfully!");
       }
-
-      const ammConfigAccount = ammConfig[0]; // Get the first account
-      const authority = await PublicKey.findProgramAddressSync(
-        [Buffer.from("vault_and_lp_mint_auth_seed")],
-        programId
-      )[0];
-      const token0Mint = await new PublicKey(
-        "So11111111111111111111111111111111111111112"
-      );
-      const token1Mint = new PublicKey(mint);
-      const [poolState, bump] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("pool", "utf-8"), // First seed
-          ammConfigAccount.pubkey.toBuffer(), // Second seed
-          token0Mint.toBuffer(), // Third seed
-          token1Mint.toBuffer(), // Fourth seed
-        ],
-        programId // Program ID
-      );
-
-      const [lpMint] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pool_lp_mint"), poolState.toBuffer()],
-        programId
-      );
-      const creatorToken0 = await getAssociatedTokenAddress(
-        token0Mint,
-        creator,
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      );
-      const creatorToken1 = await getAssociatedTokenAddress(
-        token1Mint,
-        creator,
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      );
-
-      const creatorLpToken = await getAssociatedTokenAddress(lpMint, creator);
-      const [token0Vault] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("pool_vault"),
-          poolState.toBuffer(),
-          token0Mint.toBuffer(),
-        ],
-        programId
-      );
-      const [token1Vault] = await PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("pool_vault"),
-          poolState.toBuffer(),
-          token1Mint.toBuffer(),
-        ],
-        programId // Replace with the Raydium CP program ID
-      );
-      const createPoolFee = new PublicKey(
-        "G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2"
-      );
-      const [observationState] = PublicKey.findProgramAddressSync(
-        [Buffer.from("observation"), poolState.toBuffer()],
-        programId
-      );
-      const tokenProgram = TOKEN_PROGRAM_ID;
-      const token0Program = TOKEN_PROGRAM_ID;
-      const token1Program = TOKEN_PROGRAM_ID;
-      const associatedTokenProgram = ASSOCIATED_TOKEN_PROGRAM_ID;
-      const systemProgram = SystemProgram.programId;
-      const rent = new PublicKey("SysvarRent111111111111111111111111111111111");
-
-      // // Convert values to BN
-      const initialAmount0 = new anchor.BN(100_000_000); // Replace with your actual value
-      const initialAmount1 = new anchor.BN(1_000_000_000); // Replace with your actual value
-      const open_time = new BN(Math.floor(Date.now() / 1000));
-
-      const { blockhash, lastValidBlockHeight } =
-        await connection.getLatestBlockhash();
-
-      const transaction = await program.methods
-        .initializeNewPool(initialAmount0, initialAmount1, open_time)
-        .accounts({
-          cpSwapProgram: programId,
-          creator: creator,
-          ammConfig: ammConfigAccount.pubkey,
-          authority: authority,
-          token0Mint: token0Mint,
-          token1Mint: token1Mint,
-          poolState: poolState,
-          lpMint: lpMint,
-          creatorToken0: creatorToken0,
-          creatorToken1: creatorToken1,
-          creatorLpToken: creatorLpToken,
-          token0Vault: token0Vault,
-          token1Vault: token1Vault,
-          createPoolFee: createPoolFee,
-          observationState: observationState,
-          tokenProgram: tokenProgram,
-          token0Program: token0Program,
-          token1Program: token1Program,
-          associatedTokenProgram: associatedTokenProgram,
-          systemProgram: systemProgram,
-          rent: rent,
-        })
-        .rpc();
-      const tx = await connection.confirmTransaction({
-        signature: transaction,
-        blockhash,
-        lastValidBlockHeight,
-      });
-      console.log(tx);
-      alert("Transaction successfully confirmed!");
-    } catch (error) {
-      console.error("Error initializing new pool:", error);
     }
   }
+
   if (!isClient) return null;
 
   return (
@@ -477,14 +370,39 @@ export default function Home() {
                 >
                   🚀 Create Mint
                 </button>
-                <button
-                  className="text-black"
-                  onClick={() => {
-                    wrap_sol();
-                  }}
-                >
-                  Wrap Sol
-                </button>
+                <div className="flex flex-col items-center space-y-4">
+                  {/* Display WSOL Balance */}
+                  <div className="text-lg font-medium text-gray-800">
+                    WSOL Balance:{" "}
+                    <span className="font-bold text-green-600">
+                      {wsol_amount}
+                    </span>{" "}
+                    WSOL
+                  </div>
+
+                  {/* Input Field for SOL Amount */}
+                  <input
+                    type="number"
+                    placeholder="Enter SOL amount"
+                    value={w_amount === 0 ? "" : w_amount}
+                    onChange={(e) => setWAmount(Number(e.target.value))}
+                    className="w-full max-w-sm px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+
+                  {/* Wrap SOL Button */}
+                  <button
+                    className={`w-full max-w-sm px-6 py-3 font-bold rounded-xl shadow-lg transition-all 
+      ${
+        w_amount > 0
+          ? "bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-2xl"
+          : "bg-gray-400 text-gray-700 cursor-not-allowed"
+      }`}
+                    onClick={wrap_sol}
+                    disabled={w_amount <= 0}
+                  >
+                    🪙 Wrap {w_amount || ""} SOL
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -496,7 +414,7 @@ export default function Home() {
               <div className="space-y-6 mt-8">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Initial Amount 0
+                    Initial Amount 0 of Wrapped Sol
                   </label>
                   <input
                     type="number"
@@ -507,7 +425,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Initial Amount 1
+                    Initial Amount 1 of Newly Created Token
                   </label>
                   <input
                     type="number"
@@ -516,6 +434,21 @@ export default function Home() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
                   />
                 </div>
+                {initialize_pool && (
+                  <div className="p-4 bg-gray-100 rounded-xl">
+                    <p className="text-sm font-semibold text-gray-700">
+                      Transaction ID
+                    </p>
+                    <a
+                      href={`https://solscan.io/tx/${initialize_pool}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all block overflow-x-auto whitespace-pre-wrap"
+                    >
+                      {initialize_pool}
+                    </a>
+                  </div>
+                )}
 
                 <button
                   onClick={initialize_new_pool}
