@@ -3,12 +3,19 @@ import {
   createSetAuthorityInstruction,
   AuthorityType,
   TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddress,
+  NATIVE_MINT,
+  createAssociatedTokenAccountInstruction,
+  createSyncNativeInstruction,
 } from "@solana/spl-token";
 import {
   clusterApiUrl,
   Connection,
   Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
+  sendAndConfirmTransaction,
+  SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 import toast from "react-hot-toast";
@@ -64,9 +71,6 @@ export const createNewmint = async (MintDetail: {
 
     const mint = generateSigner(umi);
 
-    console.log("Mint:", mint);
-    console.log("Mint Public Key:", mint.publicKey);
-
     const mintKeypair = Keypair.fromSecretKey(mint.secretKey);
 
     const pinata = new PinataSDK({
@@ -105,7 +109,7 @@ export const createNewmint = async (MintDetail: {
       name: name,
       uri: metadata.uri, // we use the `metedataUri` variable we created earlier that is storing our uri.
       sellerFeeBasisPoints: percentAmount(0),
-      decimals: 6, // set the amount of decimals you want your token to have.
+      decimals: 9, // set the amount of decimals you want your token to have.
     }).getInstructions()[0];
 
     const createTokenIx = createTokenIfMissing(umi, {
@@ -181,3 +185,50 @@ export const createNewmint = async (MintDetail: {
     }
   }
 };
+
+export async function wrapSol(wallet: any) {
+  const walletPublicKey = wallet.publicKey;
+  if (!walletPublicKey) {
+    console.error("Wallet is not connected");
+    return;
+  }
+  const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+  const associatedTokenAccount = await getAssociatedTokenAddress(
+    NATIVE_MINT,
+    wallet.publicKey
+  );
+
+  const wrapTransaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: associatedTokenAccount,
+      lamports: LAMPORTS_PER_SOL * 2, // Convert SOL to WSOL
+    }),
+    createSyncNativeInstruction(associatedTokenAccount) // Sync the WSOL balance
+  );
+
+  const { blockhash } = await connection.getLatestBlockhash();
+  wrapTransaction.recentBlockhash = blockhash;
+  wrapTransaction.feePayer = wallet.publicKey;
+
+  try {
+    // Request Phantom Wallet to sign and send the transaction
+    if (wallet.signTransaction) {
+      const signedTransaction = await wallet.signTransaction(wrapTransaction);
+
+      // Send the signed transaction
+      const rawTransaction = signedTransaction.serialize();
+      const signature = await connection.sendRawTransaction(rawTransaction);
+
+      // Confirm the transaction
+      const confirmation = await connection.confirmTransaction(signature);
+      console.log("Transaction confirmed:", confirmation);
+    }
+  } catch (error: unknown) {
+    console.error("Transaction failed:", error);
+
+    if (error instanceof Error && "logs" in error) {
+      console.error("Transaction logs:", (error as { logs: unknown }).logs);
+    }
+  }
+}
