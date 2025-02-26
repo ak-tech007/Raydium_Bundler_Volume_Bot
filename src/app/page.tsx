@@ -10,27 +10,20 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import bs58 from "bs58";
 import { getCsrfToken } from "next-auth/react";
 import { SigninMessage } from "@/utils/SigninMessage";
-import { createNewmint } from "@/utils/token";
+import { createNewmint, wrapSol } from "@/utils/token";
 import CustomWalletButton from "./_components/CustomWalletButton";
 import toast from "react-hot-toast";
 import dotenv from "dotenv";
 import { PinataSDK } from "pinata-web3";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-  SystemProgram,
-} from "@solana/web3.js";
+import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 import { Program, AnchorProvider, web3, BN } from "@project-serum/anchor";
 import idl from "./_idl/initialize_pool.json";
 import {
   TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddress,
-  createAssociatedTokenAccount,
 } from "@solana/spl-token";
+import * as anchor from "@coral-xyz/anchor";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -64,10 +57,10 @@ export default function Home() {
     AnchorProvider.defaultOptions()
   );
 
-  const programId = new PublicKey(
+  const contractProgramId = new PublicKey(
     "5nkUCxN2iFukZkE5yk2Z4HTxrPdwHZMmZskGzWcAfr1F"
   ); // Replace with your program ID
-  const program = new Program(idl as any, programId, provider);
+  const program = new Program(idl as any, contractProgramId, provider);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -139,12 +132,17 @@ export default function Home() {
       }
     }
   };
+  const wrap_sol = async () => {
+    if (wallet.publicKey) {
+      const result = await wrapSol(wallet);
+    }
+  };
   const createMint = async () => {
     // Your minting logic here
     if (wallet.publicKey) {
       const result = await createNewmint({
         wallet: wallet as any,
-        amount: num * 1000000,
+        amount: num * 1000000000,
         name: token_name,
         symbol: token_symbol,
         description: token_description,
@@ -197,11 +195,9 @@ export default function Home() {
         programId
       )[0];
       const token0Mint = await new PublicKey(
-        "CG9FSBTMiFBtYyoJgeTrPuG7RAFPr8qGVHV79fK4XXZg"
-      );
-      const token1Mint = new PublicKey(
         "So11111111111111111111111111111111111111112"
       );
+      const token1Mint = new PublicKey(mint);
       const [poolState, bump] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("pool", "utf-8"), // First seed
@@ -212,17 +208,15 @@ export default function Home() {
         programId // Program ID
       );
 
-      console.log(poolState.toBase58());
-      const [lpMint] = await PublicKey.findProgramAddressSync(
-        [Buffer.from("POOL_LP_MINT_SEED"), poolState.toBuffer()],
-
+      const [lpMint] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pool_lp_mint"), poolState.toBuffer()],
         programId
       );
       const creatorToken0 = await getAssociatedTokenAddress(
         token0Mint,
         creator,
         false,
-        TOKEN_2022_PROGRAM_ID,
+        TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
       const creatorToken1 = await getAssociatedTokenAddress(
@@ -234,43 +228,46 @@ export default function Home() {
       );
 
       const creatorLpToken = await getAssociatedTokenAddress(lpMint, creator);
-      const [token0Vault] = await PublicKey.findProgramAddressSync(
+      const [token0Vault] = PublicKey.findProgramAddressSync(
         [
-          Buffer.from("POOL_VAULT_SEED"),
+          Buffer.from("pool_vault"),
           poolState.toBuffer(),
           token0Mint.toBuffer(),
         ],
-        programId // Replace with the Raydium CP program ID
+        programId
       );
       const [token1Vault] = await PublicKey.findProgramAddressSync(
         [
-          Buffer.from("POOL_VAULT_SEED"),
+          Buffer.from("pool_vault"),
           poolState.toBuffer(),
           token1Mint.toBuffer(),
         ],
         programId // Replace with the Raydium CP program ID
       );
       const createPoolFee = new PublicKey(
-        "3XMrhbv989VxAMi3DErLV9eJht1pHppW5LbKxe9fkEFR"
+        "G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2"
       );
-      const [observationState] = await PublicKey.findProgramAddressSync(
-        [Buffer.from("OBSERVATION_SEED"), poolState.toBuffer()],
-        programId // Replace with the Raydium CP program ID
+      const [observationState] = PublicKey.findProgramAddressSync(
+        [Buffer.from("observation"), poolState.toBuffer()],
+        programId
       );
-      const tokenProgram = TOKEN_2022_PROGRAM_ID;
-      const token0Program = TOKEN_2022_PROGRAM_ID;
+      const tokenProgram = TOKEN_PROGRAM_ID;
+      const token0Program = TOKEN_PROGRAM_ID;
       const token1Program = TOKEN_PROGRAM_ID;
       const associatedTokenProgram = ASSOCIATED_TOKEN_PROGRAM_ID;
       const systemProgram = SystemProgram.programId;
       const rent = new PublicKey("SysvarRent111111111111111111111111111111111");
 
       // // Convert values to BN
-      // const initialAmount0 = new BN(1000); // Replace with your actual value
-      // const initialAmount1 = new BN(1000); // Replace with your actual value
+      const initialAmount0 = new anchor.BN(100_000_000); // Replace with your actual value
+      const initialAmount1 = new anchor.BN(1_000_000_000); // Replace with your actual value
       const open_time = new BN(Math.floor(Date.now() / 1000));
 
+      const { blockhash, lastValidBlockHeight } =
+        await connection.getLatestBlockhash();
+
       const transaction = await program.methods
-        .initializeNewPool(initial_amount0, initial_amount1, open_time)
+        .initializeNewPool(initialAmount0, initialAmount1, open_time)
         .accounts({
           cpSwapProgram: programId,
           creator: creator,
@@ -295,7 +292,12 @@ export default function Home() {
           rent: rent,
         })
         .rpc();
-      await connection.confirmTransaction(transaction, "finalized");
+      const tx = await connection.confirmTransaction({
+        signature: transaction,
+        blockhash,
+        lastValidBlockHeight,
+      });
+      console.log(tx);
       alert("Transaction successfully confirmed!");
     } catch (error) {
       console.error("Error initializing new pool:", error);
@@ -474,6 +476,14 @@ export default function Home() {
                   className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl shadow-lg hover:shadow-2xl transition-all"
                 >
                   🚀 Create Mint
+                </button>
+                <button
+                  className="text-black"
+                  onClick={() => {
+                    wrap_sol();
+                  }}
+                >
+                  Wrap Sol
                 </button>
               </div>
             </div>
