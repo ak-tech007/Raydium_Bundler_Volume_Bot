@@ -27,7 +27,7 @@ import {
   createFungible,
   mplTokenMetadata,
 } from "@metaplex-foundation/mpl-token-metadata";
-import { generateSigner, percentAmount } from "@metaplex-foundation/umi";
+import { generateSigner, percentAmount, Umi } from "@metaplex-foundation/umi";
 import {
   createTokenIfMissing,
   findAssociatedTokenPda,
@@ -69,9 +69,7 @@ export const createNewmint = async (MintDetail: {
     umi.use(walletAdapterIdentity(wallet));
     umi.use(mplTokenMetadata());
 
-    const mint = generateSigner(umi);
-
-    const mintKeypair = Keypair.fromSecretKey(mint.secretKey);
+    const { mint, mintKeypair } = await getValidToken0Mint(umi);
 
     const pinata = new PinataSDK({
       pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -186,7 +184,26 @@ export const createNewmint = async (MintDetail: {
   }
 };
 
-export async function wrapSol(wallet: any) {
+async function getValidToken0Mint(umi: Umi) {
+  let mint;
+  let token0MintPubkey;
+  const WSOL_MINT = new PublicKey(
+    "So11111111111111111111111111111111111111112"
+  );
+
+  // Keep generating a new mint until token0Mint is smaller than WSOL
+  do {
+    mint = generateSigner(umi);
+    token0MintPubkey = mint.publicKey;
+  } while (token0MintPubkey > WSOL_MINT.toBase58());
+
+  // Convert to Keypair
+  const mintKeypair = Keypair.fromSecretKey(mint.secretKey);
+
+  return { mint, mintKeypair };
+}
+
+export async function wrapSol(wallet: any, amount: number) {
   const walletPublicKey = wallet.publicKey;
   if (!walletPublicKey) {
     console.error("Wallet is not connected");
@@ -202,7 +219,7 @@ export async function wrapSol(wallet: any) {
     SystemProgram.transfer({
       fromPubkey: wallet.publicKey,
       toPubkey: associatedTokenAccount,
-      lamports: LAMPORTS_PER_SOL * 2, // Convert SOL to WSOL
+      lamports: LAMPORTS_PER_SOL * amount, // Convert SOL to WSOL
     }),
     createSyncNativeInstruction(associatedTokenAccount) // Sync the WSOL balance
   );
@@ -222,7 +239,8 @@ export async function wrapSol(wallet: any) {
 
       // Confirm the transaction
       const confirmation = await connection.confirmTransaction(signature);
-      console.log("Transaction confirmed:", confirmation);
+      // 🎉 Show Success Toast!
+      toast.success(`${amount} SOL wrapped successfully! ✅`);
     }
   } catch (error: unknown) {
     console.error("Transaction failed:", error);
