@@ -5,7 +5,6 @@ import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddress,
   NATIVE_MINT,
-  createAssociatedTokenAccountInstruction,
   createSyncNativeInstruction,
 } from "@solana/spl-token";
 import {
@@ -14,7 +13,6 @@ import {
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
-  sendAndConfirmTransaction,
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
@@ -107,7 +105,7 @@ export const createNewmint = async (MintDetail: {
       name: name,
       uri: metadata.uri, // we use the `metedataUri` variable we created earlier that is storing our uri.
       sellerFeeBasisPoints: percentAmount(0),
-      decimals: 9, // set the amount of decimals you want your token to have.
+      decimals: 6, // set the amount of decimals you want your token to have.
     }).getInstructions()[0];
 
     const createTokenIx = createTokenIfMissing(umi, {
@@ -116,13 +114,16 @@ export const createNewmint = async (MintDetail: {
       ataProgram: getSplAssociatedTokenProgramId(umi),
     }).getInstructions()[0];
 
+    const decimals = 6; // Token has 9 decimal places
+    const adjustedAmount = BigInt(amount) * BigInt(10 ** decimals); // 100000000000000000000
+
     const mintTokensIx = mintTokensTo(umi, {
       mint: mint.publicKey,
       token: findAssociatedTokenPda(umi, {
         mint: mint.publicKey,
         owner: umi.identity.publicKey,
       }),
-      amount: BigInt(amount),
+      amount: adjustedAmount,
     }).getInstructions()[0];
 
     const revokeMintAuthIx = await createSetAuthorityInstruction(
