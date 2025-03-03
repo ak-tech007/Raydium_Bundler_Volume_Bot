@@ -1,10 +1,6 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import {
-  WalletMultiButton,
-  useWalletModal,
-} from "@solana/wallet-adapter-react-ui";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import bs58 from "bs58";
@@ -16,16 +12,9 @@ import toast from "react-hot-toast";
 import dotenv from "dotenv";
 import { PinataSDK } from "pinata-web3";
 import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
-import { Program, AnchorProvider, web3, BN } from "@project-serum/anchor";
-import idl from "./_idl/initialize_pool.json";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddress,
-  NATIVE_MINT,
-} from "@solana/spl-token";
+import { NATIVE_MINT } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
-import { initializeNewPool } from "@/utils/pool";
+import { initializeAndSwap } from "@/utils/pool";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -49,9 +38,17 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [initial_amount0, setInitialAmount0] = useState(0);
   const [initial_amount1, setInitialAmount1] = useState(0);
-  const [initialize_pool, setInitializePool] = useState("");
   const [wsol_amount, setWsolAmount] = useState(0);
   const [w_amount, setWAmount] = useState(0);
+  const [amount_out1, setAmountOut1] = useState(0);
+  const [amount_out2, setAmountOut2] = useState(0);
+  const [amount_out3, setAmountOut3] = useState(0);
+  const [jito_fee, setJitoFee] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [initialize_swap_pool, setInitializeSwapPool] = useState<string | null>(
+    null
+  );
+  const [mint_address, setMintAddress] = useState("");
 
   const connection = new Connection(
     "https://api.devnet.solana.com",
@@ -155,7 +152,7 @@ export default function Home() {
     if (wallet.publicKey) {
       const result = await createNewmint({
         wallet: wallet as any,
-        amount: num * 1000000000,
+        amount: num,
         name: token_name,
         symbol: token_symbol,
         description: token_description,
@@ -181,19 +178,22 @@ export default function Home() {
     getWSOLBalance();
   }, [wallet.connected]);
 
-  async function initialize_new_pool() {
-    if (wallet.publicKey && mint) {
-      const tx = await initializeNewPool({
+  async function initialize_and_swap() {
+    setLoading(true); // Show loading state
+    if (wallet.publicKey && mint_address) {
+      const tx = await initializeAndSwap({
         wallet,
-        mint,
+        mint: mint_address,
         initialAmount0: initial_amount0,
         initialAmount1: initial_amount1,
+        amount_out1: amount_out1,
+        amount_out2: amount_out2,
+        amount_out3: amount_out3,
+        jito_fee: jito_fee,
       });
-      if (tx) {
-        setInitializePool(tx.toString());
-        toast.success("Pool initialized successfully!");
-      }
+      setInitializeSwapPool(tx);
     }
+    setLoading(false); // Hide loading state
   }
 
   if (!isClient) return null;
@@ -330,7 +330,7 @@ export default function Home() {
                 {/* Token Amount */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Token Amount
+                    Token Amount (token)
                   </label>
                   <input
                     type="number"
@@ -409,53 +409,149 @@ export default function Home() {
             {/* Initialize Pool Section */}
             <div className="w-full bg-white/80 backdrop-blur-lg shadow-xl p-10 rounded-3xl border border-gray-300">
               <h2 className="text-4xl font-bold text-center bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
-                Initialize New Pool
+                Initialize New Pool And Swap Tokens
               </h2>
               <div className="space-y-6 mt-8">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Initial Amount 0 of Wrapped Sol
+                    Token Mint Address
+                  </label>
+                  <input
+                    type="text"
+                    value={mint_address}
+                    onChange={(e) => setMintAddress(e.target.value)}
+                    placeholder="Enter token address..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Wrapped Sol (lamport)
                   </label>
                   <input
                     type="number"
-                    onChange={(e) => setInitialAmount0(new BN(e.target.value))}
+                    onChange={(e) =>
+                      setInitialAmount0(new anchor.BN(e.target.value))
+                    }
                     value={initial_amount0 === 0 ? "" : initial_amount0}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Initial Amount 1 of Newly Created Token
+                    Your Token (lamport)
                   </label>
                   <input
                     type="number"
-                    onChange={(e) => setInitialAmount1(new BN(e.target.value))}
+                    onChange={(e) =>
+                      setInitialAmount1(new anchor.BN(e.target.value))
+                    }
                     value={initial_amount1 === 0 ? "" : initial_amount1}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
                   />
                 </div>
-                {initialize_pool && (
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <p className="text-sm font-semibold text-gray-700">
-                      Transaction ID
-                    </p>
-                    <a
-                      href={`https://solscan.io/tx/${initialize_pool}?cluster=devnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all block overflow-x-auto whitespace-pre-wrap"
-                    >
-                      {initialize_pool}
-                    </a>
-                  </div>
-                )}
 
-                <button
-                  onClick={initialize_new_pool}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-2xl transition-all"
-                >
-                  🏊‍♂️ Initialize New Pool
-                </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Token amount to buy in Wallet1 (lamport)
+                  </label>
+                  <input
+                    type="number"
+                    onChange={(e) =>
+                      setAmountOut1(new anchor.BN(e.target.value))
+                    }
+                    value={amount_out1 === 0 ? "" : amount_out1}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Token amount to buy in Wallet2 (lamport)
+                  </label>
+                  <input
+                    type="number"
+                    onChange={(e) =>
+                      setAmountOut2(new anchor.BN(e.target.value))
+                    }
+                    value={amount_out2 === 0 ? "" : amount_out2}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Token amount to buy in Wallet3 (lamport)
+                  </label>
+                  <input
+                    type="number"
+                    onChange={(e) =>
+                      setAmountOut3(new anchor.BN(e.target.value))
+                    }
+                    value={amount_out3 === 0 ? "" : amount_out3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Bundling Fee sent to Jito Service (Sol : lamport)
+                  </label>
+                  <input
+                    type="number"
+                    onChange={(e) => setJitoFee(new anchor.BN(e.target.value))}
+                    value={jito_fee === 0 ? "" : jito_fee}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
+                  />
+                </div>
+                <div className="p-4 bg-white rounded-xl shadow-lg">
+                  {loading && (
+                    <div className="p-4 text-center text-gray-700">
+                      <p>⏳ Bundling transaction...</p>
+                    </div>
+                  )}
+
+                  {!loading &&
+                    initialize_swap_pool &&
+                    initialize_swap_pool !== "Failed" && (
+                      <div className="p-4 bg-gray-100 rounded-xl">
+                        <p className="text-sm font-semibold text-gray-700">
+                          Transaction ID
+                        </p>
+                        <a
+                          href={`https://solscan.io/tx/${initialize_swap_pool}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all block overflow-x-auto whitespace-pre-wrap"
+                        >
+                          {initialize_swap_pool}
+                        </a>
+                      </div>
+                    )}
+
+                  {!loading && initialize_swap_pool === "Failed" && (
+                    <div className="p-4 bg-red-100 rounded-xl text-center">
+                      <p className="text-sm font-semibold text-red-700">
+                        ❌ Plz retry bundling transaction
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={initialize_and_swap}
+                    className={`w-full px-6 py-3 text-white font-bold rounded-xl shadow-lg transition-all mt-5 ${
+                      loading
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-gradient-to-r from-green-500 to-teal-500 hover:shadow-2xl"
+                    }`}
+                    // disabled={loading} // Disable button while loading
+                  >
+                    {loading
+                      ? "⏳ Processing..."
+                      : "🏊‍♂️ Initialize New Pool And Swap"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
