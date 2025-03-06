@@ -15,6 +15,7 @@ import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NATIVE_MINT } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import { initializeAndSwap } from "@/utils/pool";
+import { test } from "@/utils/distribute";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -179,21 +180,25 @@ export default function Home() {
   }, [wallet.connected]);
 
   async function initialize_and_swap() {
-    setLoading(true); // Show loading state
-    if (wallet.publicKey && mint_address) {
-      const tx = await initializeAndSwap({
-        wallet,
-        mint: mint_address,
-        initialAmount0: initial_amount0,
-        initialAmount1: initial_amount1,
-        amount_out1: amount_out1,
-        amount_out2: amount_out2,
-        amount_out3: amount_out3,
-        jito_fee: jito_fee,
-      });
-      setInitializeSwapPool(tx);
+    if (wallet.publicKey) {
+      test(wallet, mint_address);
     }
-    setLoading(false); // Hide loading state
+
+    // setLoading(true); // Show loading state
+    // if (wallet.publicKey && mint_address) {
+    //   const tx = await initializeAndSwap({
+    //     wallet,
+    //     mint: mint_address,
+    //     initialAmount0: initial_amount0,
+    //     initialAmount1: initial_amount1,
+    //     amount_out1: amount_out1,
+    //     amount_out2: amount_out2,
+    //     amount_out3: amount_out3,
+    //     jito_fee: jito_fee,
+    //   });
+    //   setInitializeSwapPool(tx);
+    // }
+    // setLoading(false); // Hide loading state
   }
 
   if (!isClient) return null;
