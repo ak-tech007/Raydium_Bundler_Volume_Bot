@@ -72,7 +72,6 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
       "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
     );
     const creator = wallet.publicKey;
-    console.log("creator =====>", creator);
     if (!creator) {
       throw new Error("Wallet public key is null");
     }

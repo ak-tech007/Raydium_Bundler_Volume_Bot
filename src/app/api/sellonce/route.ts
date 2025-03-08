@@ -3,7 +3,7 @@ import { Keypair, Connection, PublicKey, Transaction } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { sellCustomTokens } from "@/lib/sellTokens"; // Move function to /lib
 import bs58 from "bs58";
-import { buyCustomTokens } from "@/lib/buyTokens";
+import { sellCustomTokensOnce } from "@/lib/sellTokensOnce";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const mint = body.mint;
 
     // Execute the sell function
-    const txSignature = await buyCustomTokens(wallet, amount, mint);
+    const txSignature = await sellCustomTokensOnce(wallet, amount, mint);
 
     return NextResponse.json({ success: true, txSignature });
   } catch (error) {

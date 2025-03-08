@@ -31,7 +31,7 @@ import {
 } from "../state/atoms";
 
 import RealTimePriceChart from "./_components/RealTimePriceChart";
-import { Buy, Sell } from "@/utils/swap";
+import { Buy, Sell, Sell_Once } from "@/utils/swap";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -93,6 +93,12 @@ export default function Home() {
     const all_wallets = await store.get(walletsForAllAtom);
     await waitForCondition(() => store.get(tradingStateAtom) === "buying");
     await Buy(mint_address, all_wallets);
+  };
+
+  const totalSell = async () => {
+    store.set(tradingStateAtom, "idle");
+    const all_wallets = await store.get(walletsForAllAtom);
+    await Sell_Once(mint_address, all_wallets);
   };
 
   const connection = new Connection(
@@ -654,12 +660,21 @@ export default function Home() {
                 </button>
               </div>
 
-              <button
-                className="mt-6 px-8 py-3 bg-blue-500 text-white rounded-xl shadow-md transition-all hover:bg-blue-600 hover:shadow-lg"
-                onClick={withdrawSOLToMyWallet}
-              >
-                💰 Withdraw
-              </button>
+              {/* Aligning "Total Sell" and "Withdraw" horizontally */}
+              <div className="mt-6 flex space-x-6">
+                <button
+                  className="px-8 py-3 bg-purple-500 text-white rounded-xl shadow-md transition-all hover:bg-purple-600 hover:shadow-lg"
+                  onClick={totalSell} // Add your handler for "Total Sell"
+                >
+                  💸 Total Sell
+                </button>
+                <button
+                  className="px-8 py-3 bg-blue-500 text-white rounded-xl shadow-md transition-all hover:bg-blue-600 hover:shadow-lg"
+                  onClick={withdrawSOLToMyWallet}
+                >
+                  💰 Withdraw
+                </button>
+              </div>
             </div>
           </div>
         </div>

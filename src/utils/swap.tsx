@@ -1,5 +1,5 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { getTokenBalance } from "./distribute";
+import { concentrateTokens, getTokenBalance } from "./distribute";
 import { NATIVE_MINT } from "@solana/spl-token";
 import { tradingStateAtom } from "../state/atoms";
 import { getDefaultStore } from "jotai";
@@ -79,6 +79,7 @@ export async function Buy(mint: string, allWallets: Keypair[]) {
       balance,
       Math.floor(balance * (0.1 + Math.random() * 0.4))
     );
+    // await wrapSol_keypair(wallet, swapAmount);
 
     try {
       const response = await fetch("/api/buy", {
@@ -106,5 +107,51 @@ export async function Buy(mint: string, allWallets: Keypair[]) {
     }
 
     await delay(1000); // Small delay to avoid excessive looping
+  }
+}
+
+export async function Sell_Once(mint: string, allWallets: Keypair[]) {
+  const TOKEN_MINT = new PublicKey(mint);
+
+  const target_wallet = await concentrateTokens(TOKEN_MINT, allWallets);
+
+  let balance = await getTokenBalance(target_wallet.publicKey, TOKEN_MINT);
+  if (balance <= 0) {
+    console.warn(
+      `❌ Wallet ${target_wallet.publicKey.toBase58()} has no Token. Skipping...`
+    );
+    return;
+  }
+  const wallet_secureKey = bs58.encode(target_wallet.secretKey);
+
+  let swapAmount = balance;
+
+  try {
+    const response = await fetch("/api/sellonce", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        walletPrivateKey: wallet_secureKey,
+        amount: swapAmount,
+        mint: mint,
+      }),
+    });
+
+    const result = await response.json();
+    if (response.ok && result.success) {
+      console.log(
+        `✅ Successfully swap ${swapAmount} tokens from ${target_wallet.publicKey.toBase58()}`
+      );
+    } else {
+      console.warn(
+        `❌ Swap failed for ${target_wallet.publicKey.toBase58()}:`,
+        result.error || "Unknown error"
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `❌ Swap failed for ${target_wallet.publicKey.toBase58()}:`,
+      error
+    );
   }
 }

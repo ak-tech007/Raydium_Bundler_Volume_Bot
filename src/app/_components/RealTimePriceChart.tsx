@@ -75,7 +75,7 @@ const LiquidityPoolChart = () => {
     // Price = token1 / token0 (Assuming token0 is the base currency)
     const price = token0Balance / token1Balance;
 
-    return price.toFixed(6);
+    return price.toFixed(9);
   };
 
   return (

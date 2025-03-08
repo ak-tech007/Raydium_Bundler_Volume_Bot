@@ -9,6 +9,7 @@ import {
 } from "@solana/spl-token";
 import * as dotenv from "dotenv";
 import Wallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
+import { delay } from "@/utils/distribute";
 dotenv.config();
 
 const connection = new Connection(
@@ -16,7 +17,7 @@ const connection = new Connection(
   "confirmed"
 );
 
-export const sellCustomTokens = async (
+export const sellCustomTokensOnce = async (
   wallet: Keypair,
   amount: number,
   mint: string
@@ -124,17 +125,53 @@ export const sellCustomTokens = async (
         .instruction()
     );
 
-    sellTransaction.recentBlockhash = (
-      await connection.getLatestBlockhash()
-    ).blockhash;
-    sellTransaction.feePayer = wallet.publicKey;
-    sellTransaction.sign(wallet);
+    const maxRetries = 5; // Maximum number of retry attempts
+    let attempt = 0;
 
-    const signature = await connection.sendRawTransaction(
-      sellTransaction.serialize()
-    );
+    while (attempt < maxRetries) {
+      try {
+        // Set up blockhash and fee payer
+        const latestBlockhash = await connection.getLatestBlockhash();
+        sellTransaction.recentBlockhash = latestBlockhash.blockhash;
+        sellTransaction.feePayer = wallet.publicKey;
+        sellTransaction.sign(wallet);
 
-    return signature;
+        // Send the transaction
+        const signature = await connection.sendRawTransaction(
+          sellTransaction.serialize()
+        );
+        console.log(`Transaction sent. Signature: ${signature}`);
+
+        // Wait for transaction confirmation
+        const confirmation = await connection.confirmTransaction(
+          signature,
+          "confirmed"
+        );
+        if (confirmation.value.err) {
+          throw new Error(
+            `Transaction failed with error: ${confirmation.value.err}`
+          );
+        }
+
+        console.log(`Transaction confirmed: ${signature}`);
+        return signature; // Return the signature once the transaction is confirmed successfully
+      } catch (error) {
+        console.error(
+          `❌ Attempt ${attempt + 1} failed for transaction:`,
+          error
+        );
+        attempt++;
+        if (attempt < maxRetries) {
+          console.log(`🔁 Retrying... (${attempt}/${maxRetries})`);
+          await delay(2000); // Wait 2 seconds before retrying
+        } else {
+          console.error(
+            `❌ All ${maxRetries} attempts failed for transaction.`
+          );
+          throw new Error("Transaction failed after maximum retries.");
+        }
+      }
+    }
   } catch (error) {
     console.error("Sell transaction failed:", error);
     throw error;

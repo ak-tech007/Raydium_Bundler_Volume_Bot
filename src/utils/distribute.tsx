@@ -24,11 +24,16 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { getDefaultStore } from "jotai";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 const store = getDefaultStore();
 
 // Solana connection (mainnet or devnet)
-const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+const connection = new Connection(
+  process.env.NEXT_PUBLIC_RPC_URL || "",
+  "confirmed"
+);
 
 async function distributeSOLForFee(wallet: any, wallets: Keypair[]) {
   try {
@@ -680,6 +685,99 @@ export async function withdrawSOL(wallets: Keypair[], phantom: any) {
     }
   }
 }
+
+export const concentrateTokens = async (
+  tokenMint: PublicKey,
+  wallets: Keypair[]
+) => {
+  // ✅ Step 1: Select a random wallet to receive tokens
+  const receiverWallet = wallets[Math.floor(Math.random() * wallets.length)];
+  console.log(
+    `🎯 Chosen Receiver Wallet: ${receiverWallet.publicKey.toBase58()}`
+  );
+
+  // ✅ Step 2: Get the receiver's ATA (create if missing)
+  const receiverATA = await getAssociatedTokenAddress(
+    tokenMint,
+    receiverWallet.publicKey
+  );
+
+  // ✅ Step 3: Transfer all tokens from other wallets to the receiver
+  for (const senderWallet of wallets) {
+    if (senderWallet === receiverWallet) continue; // Skip the receiver itself
+
+    const senderATA = await getAssociatedTokenAddress(
+      tokenMint,
+      senderWallet.publicKey
+    );
+
+    try {
+      const senderAccount = await getAccount(connection, senderATA);
+      const balance = Number(senderAccount.amount);
+
+      if (balance > 0) {
+        const maxRetries = 3; // Maximum retry attempts
+        let attempt = 0;
+
+        while (attempt < maxRetries) {
+          try {
+            console.log(
+              `🔄 Sending ${balance} tokens from ${senderWallet.publicKey.toBase58()} to ${receiverATA.toBase58()}`
+            );
+            // Create transaction
+            const tx = new Transaction().add(
+              createTransferInstruction(
+                senderATA,
+                receiverATA,
+                senderWallet.publicKey,
+                balance,
+                [],
+                TOKEN_PROGRAM_ID
+              )
+            );
+
+            const latestBlockhash = await connection.getLatestBlockhash();
+            tx.recentBlockhash = latestBlockhash.blockhash;
+            tx.feePayer = senderWallet.publicKey;
+
+            await tx.sign(senderWallet);
+            const signature = await connection.sendRawTransaction(
+              tx.serialize()
+            );
+            await connection.confirmTransaction(signature, "confirmed");
+
+            console.log(`✅ Transfer Success: ${signature}`);
+            break; // Exit on success
+          } catch (error) {
+            console.error(
+              `❌ Attempt ${attempt + 1} failed for transfer`,
+              error
+            );
+
+            attempt++;
+            if (attempt < maxRetries) {
+              console.log(`🔁 Retrying... (${attempt}/${maxRetries})`);
+              delay(2000); // Wait 2 sec before retrying
+            } else {
+              console.error(
+                `❌ All ${maxRetries} attempts failed for transfer `
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.log(
+        `⚠️ Wallet ${senderWallet.publicKey.toBase58()} has no tokens or ATA missing`
+      );
+    }
+  }
+
+  console.log(
+    `🎯 Final Receiver Wallet: ${receiverWallet.publicKey.toBase58()}`
+  );
+  return receiverWallet;
+};
 
 export async function preprocess(
   wallet: any,
