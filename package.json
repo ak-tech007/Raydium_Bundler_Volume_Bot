@@ -25,6 +25,7 @@
     "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
     "fs": "^0.0.1-security",
+    "jotai": "^2.12.1",
     "mime": "^4.0.6",
     "next": "15.1.7",
     "next-auth": "^4.24.11",
@@ -33,6 +34,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
+    "recharts": "^2.15.1",
     "rpc-websockets": "^9.1.1",
     "tweetnacl": "^1.0.3"
   },

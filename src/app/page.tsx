@@ -15,7 +15,23 @@ import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NATIVE_MINT } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import { initializeAndSwap } from "@/utils/pool";
-import { test } from "@/utils/distribute";
+import {
+  delay,
+  distributeTokens,
+  getTokenBalance,
+  preprocess,
+  unwrapAllWSOL,
+  withdrawSOL,
+} from "@/utils/distribute";
+import { useAtom, useStore } from "jotai";
+import {
+  tradingStateAtom,
+  walletsForAllAtom,
+  walletsForBundlingAtom,
+} from "../state/atoms";
+
+import RealTimePriceChart from "./_components/RealTimePriceChart";
+import { Buy, Sell } from "@/utils/swap";
 dotenv.config();
 const pinata = new PinataSDK({
   pinataJwt: process.env.NEXT_PUBLIC_PINATA_JWT,
@@ -50,6 +66,34 @@ export default function Home() {
     null
   );
   const [mint_address, setMintAddress] = useState("");
+  const [wsol_bundling, setWsolBundling] = useState(0);
+  const [wsol_distribute, setWsolDistribute] = useState(0);
+  const store = useStore();
+
+  const startSelling = async () => {
+    store.set(tradingStateAtom, "selling");
+    const all_wallets = await store.get(walletsForAllAtom);
+    // Wait until tradingStateAtom is "selling"
+    await waitForCondition(() => store.get(tradingStateAtom) === "selling");
+    await Sell(mint_address, all_wallets);
+  };
+
+  const waitForCondition = async (condition: () => boolean, interval = 100) => {
+    while (!condition()) {
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  };
+
+  const stopTrading = async () => {
+    store.set(tradingStateAtom, "idle");
+  };
+
+  const startBuying = async () => {
+    store.set(tradingStateAtom, "buying");
+    const all_wallets = await store.get(walletsForAllAtom);
+    await waitForCondition(() => store.get(tradingStateAtom) === "buying");
+    await Buy(mint_address, all_wallets);
+  };
 
   const connection = new Connection(
     "https://api.devnet.solana.com",
@@ -180,25 +224,36 @@ export default function Home() {
   }, [wallet.connected]);
 
   async function initialize_and_swap() {
-    if (wallet.publicKey) {
-      test(wallet, mint_address);
-    }
+    setLoading(true);
 
-    // setLoading(true); // Show loading state
-    // if (wallet.publicKey && mint_address) {
-    //   const tx = await initializeAndSwap({
-    //     wallet,
-    //     mint: mint_address,
-    //     initialAmount0: initial_amount0,
-    //     initialAmount1: initial_amount1,
-    //     amount_out1: amount_out1,
-    //     amount_out2: amount_out2,
-    //     amount_out3: amount_out3,
-    //     jito_fee: jito_fee,
-    //   });
-    //   setInitializeSwapPool(tx);
-    // }
-    // setLoading(false); // Hide loading state
+    // Show loading state
+    if (wallet.publicKey && mint_address) {
+      await preprocess(wallet, mint_address, wsol_bundling, wsol_distribute);
+      const bundle_wallets = await store.get(walletsForBundlingAtom);
+      const all_wallets = await store.get(walletsForAllAtom);
+      const tx = await initializeAndSwap({
+        wallet,
+        mint: mint_address,
+        initialAmount0: initial_amount0,
+        initialAmount1: initial_amount1,
+        amount_out1: amount_out1,
+        amount_out2: amount_out2,
+        amount_out3: amount_out3,
+        jito_fee: jito_fee,
+        bundle_wallets: bundle_wallets,
+      });
+      setInitializeSwapPool(tx);
+
+      await distributeTokens(bundle_wallets, all_wallets, mint_address, wallet);
+    }
+    setLoading(false); // Hide loading state
+  }
+
+  async function withdrawSOLToMyWallet() {
+    store.set(tradingStateAtom, "idle");
+    const all_wallets = await store.get(walletsForAllAtom);
+    await unwrapAllWSOL(all_wallets, wallet);
+    await withdrawSOL(all_wallets, wallet);
   }
 
   if (!isClient) return null;
@@ -210,354 +265,401 @@ export default function Home() {
       </div>
 
       {session ? (
-        <div className="min-h-screen bg-gradient-to-br from-blue-100 to-white p-10">
-          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Token Creation Form */}
-            <div className="w-full bg-white/80 backdrop-blur-lg shadow-xl p-10 rounded-3xl border border-gray-300">
-              <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Create Your Token
-              </h1>
-              <div className="space-y-6 mt-8">
-                {/* Token Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Name
-                  </label>
-                  <input
-                    type="text"
-                    value={token_name}
-                    onChange={(e) => setTokenName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                    placeholder="Enter token name..."
-                  />
-                </div>
+        <div className="min-h-screen bg-gray-100 p-10 flex flex-col gap-10">
+          <div className="max-w-full mx-auto flex flex-col lg:flex-row gap-12">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-12">
+              {/* Token Creation Form */}
+              <div className="w-full max-w-3xl mx-auto bg-white shadow-lg p-10 rounded-3xl border border-gray-200 transition-all hover:shadow-2xl">
+                {/* Title */}
+                <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  🚀 Create Your Token
+                </h1>
 
-                {/* Token Symbol */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Symbol
-                  </label>
-                  <input
-                    type="text"
-                    value={token_symbol}
-                    onChange={(e) => setTokenSymbol(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                    placeholder="Enter token symbol..."
-                  />
-                </div>
+                {/* Inputs Section */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+                  {/* Left - Inputs */}
+                  <div className="space-y-4">
+                    <input
+                      type="text"
+                      value={token_name}
+                      onChange={(e) => setTokenName(e.target.value)}
+                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                      placeholder="🔤 Token Name"
+                    />
+                    <input
+                      type="text"
+                      value={token_symbol}
+                      onChange={(e) => setTokenSymbol(e.target.value)}
+                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                      placeholder="✨ Token Symbol"
+                    />
+                    <textarea
+                      value={token_description}
+                      onChange={(e) => setTokenDescription(e.target.value)}
+                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                      placeholder="📝 Token Description"
+                    />
+                    <input
+                      type="number"
+                      value={num || ""}
+                      onChange={(e) => setNum(Number(e.target.value))}
+                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                      placeholder="🔢 Token Amount"
+                    />
+                  </div>
 
-                {/* Token Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Description
-                  </label>
-                  <textarea
-                    value={token_description}
-                    onChange={(e) => setTokenDescription(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                    placeholder="Enter token description..."
-                  ></textarea>
-                </div>
-
-                {/* Token Image Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Image
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                  />
-                  <button
-                    onClick={uploadToPinata}
-                    className={`mt-2 w-full px-4 py-3 rounded-xl font-semibold ${
-                      uploading
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                    } transition-all`}
-                    disabled={uploading}
-                  >
-                    {uploading ? "Uploading..." : "Upload to Pinata"}
-                  </button>
-                  {token_image && (
-                    <div className="mt-4">
+                  {/* Right - Token Image & Upload */}
+                  <div className="space-y-4">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                    />
+                    <button
+                      onClick={uploadToPinata}
+                      className={`w-full px-4 py-3 rounded-xl font-semibold transition ${
+                        uploading
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                      }`}
+                      disabled={uploading}
+                    >
+                      {uploading ? "⏳ Uploading..." : "📤 Upload Image"}
+                    </button>
+                    {token_image && (
                       <img
                         src={token_image}
-                        alt="Uploaded Token"
-                        className="w-32 h-32 rounded-xl border-2 border-gray-600 object-cover hover:border-blue-500 transition-all"
+                        alt="Token"
+                        className="w-28 h-28 mx-auto rounded-xl border border-gray-400 object-cover shadow-lg"
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* Social Links */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Twitter URL
-                    </label>
-                    <input
-                      type="text"
-                      value={token_twitter}
-                      onChange={(e) => setTokenTwitter(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                      placeholder="Enter Twitter URL..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Telegram URL
-                    </label>
-                    <input
-                      type="text"
-                      value={token_telegram}
-                      onChange={(e) => setTokenTelegram(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                      placeholder="Enter Telegram URL..."
-                    />
-                  </div>
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Website URL
-                    </label>
-                    <input
-                      type="text"
-                      value={token_website}
-                      onChange={(e) => setTokenWebsite(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
-                      placeholder="Enter Website URL..."
-                    />
-                  </div>
-                </div>
-
-                {/* Token Amount */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Amount (token)
-                  </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
                   <input
-                    type="number"
-                    value={num === 0 ? "" : num}
-                    onChange={(e) => setNum(Number(e.target.value))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-black"
+                    type="text"
+                    value={token_twitter}
+                    onChange={(e) => setTokenTwitter(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                    placeholder="🐦 Twitter URL"
+                  />
+                  <input
+                    type="text"
+                    value={token_telegram}
+                    onChange={(e) => setTokenTelegram(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                    placeholder="💬 Telegram URL"
+                  />
+                  <input
+                    type="text"
+                    value={token_website}
+                    onChange={(e) => setTokenWebsite(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 text-black shadow-sm"
+                    placeholder="🌐 Website URL"
                   />
                 </div>
 
                 {/* Mint Address & Transaction */}
-                <div className="space-y-4">
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <p className="text-sm font-semibold text-gray-700">
-                      Token Mint Address
+                <div className="flex flex-col space-y-4 mt-6 text-sm">
+                  <div className="p-4 bg-gray-100 rounded-xl shadow-sm border">
+                    <p className="font-semibold text-gray-700">
+                      🪙 Token Mint Address
                     </p>
-                    <p className="mt-1 text-gray-500 break-all">{mint}</p>
+                    <p className="text-gray-500 break-all">{mint}</p>
                   </div>
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <p className="text-sm font-semibold text-gray-700">
-                      Transaction ID
+
+                  <div className="p-4 bg-gray-100 rounded-xl shadow-sm border">
+                    <p className="font-semibold text-gray-700">
+                      🔗 Transaction ID
                     </p>
                     <a
                       href={`https://solscan.io/tx/${transaction}?cluster=devnet`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all"
+                      className="text-blue-600 hover:text-blue-500 break-all transition"
                     >
                       {transaction}
                     </a>
                   </div>
                 </div>
 
-                {/* Create Mint Button */}
-                <button
-                  onClick={createMint}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl shadow-lg hover:shadow-2xl transition-all"
-                >
-                  🚀 Create Mint
-                </button>
-                <div className="flex flex-col items-center space-y-4">
-                  {/* Display WSOL Balance */}
-                  <div className="text-lg font-medium text-gray-800">
-                    WSOL Balance:{" "}
-                    <span className="font-bold text-green-600">
-                      {wsol_amount}
-                    </span>{" "}
-                    WSOL
-                  </div>
-
-                  {/* Input Field for SOL Amount */}
-                  <input
-                    type="number"
-                    placeholder="Enter SOL amount"
-                    value={w_amount === 0 ? "" : w_amount}
-                    onChange={(e) => setWAmount(Number(e.target.value))}
-                    className="w-full max-w-sm px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-
-                  {/* Wrap SOL Button */}
+                {/* Buttons Section */}
+                <div className="flex flex-col space-y-5 mt-8">
+                  {/* Create Mint Button */}
                   <button
-                    className={`w-full max-w-sm px-6 py-3 font-bold rounded-xl shadow-lg transition-all 
-      ${
-        w_amount > 0
-          ? "bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-2xl"
-          : "bg-gray-400 text-gray-700 cursor-not-allowed"
-      }`}
-                    onClick={wrap_sol}
-                    disabled={w_amount <= 0}
+                    onClick={createMint}
+                    className="w-full px-6 py-4 bg-blue-500 text-white font-bold rounded-2xl shadow-md hover:shadow-lg hover:bg-blue-600 transition-all"
                   >
-                    🪙 Wrap {w_amount || ""} SOL
+                    🚀 Create Mint
                   </button>
+
+                  {/* WSOL Balance Section */}
+                  <div className="bg-gray-50 p-5 rounded-2xl shadow-md border">
+                    {/* SOL Input & Balance Row */}
+                    <div className="flex flex-row items-center justify-between space-x-4">
+                      {/* SOL Input Field */}
+                      <div className="relative w-56">
+                        <input
+                          type="number"
+                          placeholder="💰 Enter SOL"
+                          value={w_amount || ""}
+                          onChange={(e) => setWAmount(Number(e.target.value))}
+                          className="w-full px-4 py-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-green-500 text-black"
+                        />
+                        <span className="absolute right-3 top-3 text-gray-400 text-sm">
+                          SOL
+                        </span>
+                      </div>
+
+                      {/* WSOL Balance */}
+                      <div className="text-sm font-medium text-gray-800 bg-white px-4 py-3 rounded-xl shadow-md border">
+                        🏦 Balance:{" "}
+                        <span className="font-bold text-green-600">
+                          {wsol_amount}
+                        </span>{" "}
+                        WSOL
+                      </div>
+                    </div>
+
+                    {/* Wrap Button */}
+                    <button
+                      onClick={wrap_sol}
+                      disabled={w_amount <= 0}
+                      className={`w-full mt-4 px-5 py-3 font-bold rounded-xl shadow-md transition-all duration-300 ${
+                        w_amount > 0
+                          ? "bg-green-500 text-white hover:bg-green-600 hover:shadow-lg"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      🪙 Wrap {w_amount || "0"} SOL
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Initialize Pool Section */}
-            <div className="w-full bg-white/80 backdrop-blur-lg shadow-xl p-10 rounded-3xl border border-gray-300">
-              <h2 className="text-4xl font-bold text-center bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
-                Initialize New Pool And Swap Tokens
-              </h2>
-              <div className="space-y-6 mt-8">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token Mint Address
-                  </label>
-                  <input
-                    type="text"
-                    value={mint_address}
-                    onChange={(e) => setMintAddress(e.target.value)}
-                    placeholder="Enter token address..."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Wrapped Sol (lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) =>
-                      setInitialAmount0(new anchor.BN(e.target.value))
-                    }
-                    value={initial_amount0 === 0 ? "" : initial_amount0}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Your Token (lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) =>
-                      setInitialAmount1(new anchor.BN(e.target.value))
-                    }
-                    value={initial_amount1 === 0 ? "" : initial_amount1}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token amount to buy in Wallet1 (lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) =>
-                      setAmountOut1(new anchor.BN(e.target.value))
-                    }
-                    value={amount_out1 === 0 ? "" : amount_out1}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token amount to buy in Wallet2 (lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) =>
-                      setAmountOut2(new anchor.BN(e.target.value))
-                    }
-                    value={amount_out2 === 0 ? "" : amount_out2}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Token amount to buy in Wallet3 (lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) =>
-                      setAmountOut3(new anchor.BN(e.target.value))
-                    }
-                    value={amount_out3 === 0 ? "" : amount_out3}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Bundling Fee sent to Jito Service (Sol : lamport)
-                  </label>
-                  <input
-                    type="number"
-                    onChange={(e) => setJitoFee(new anchor.BN(e.target.value))}
-                    value={jito_fee === 0 ? "" : jito_fee}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none text-black"
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-lg">
-                  {loading && (
-                    <div className="p-4 text-center text-gray-700">
-                      <p>⏳ Bundling transaction...</p>
+              {/* Initialize Pool Section */}
+              <div className="w-full max-w-3xl mx-auto bg-white shadow-xl p-10 rounded-3xl border border-gray-200 transition-all hover:shadow-2xl">
+                <h2 className="text-4xl font-bold text-center bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
+                  Initialize New Pool And Swap Tokens
+                </h2>
+                <div className="space-y-6 mt-8">
+                  <div className="space-y-6 mt-8">
+                    {/* Token Mint Address Input */}
+                    <div className="relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="text"
+                        value={mint_address}
+                        onChange={(e) => setMintAddress(e.target.value)}
+                        placeholder="🔗 Token Mint Address"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
                     </div>
-                  )}
 
-                  {!loading &&
-                    initialize_swap_pool &&
-                    initialize_swap_pool !== "Failed" && (
-                      <div className="p-4 bg-gray-100 rounded-xl">
-                        <p className="text-sm font-semibold text-gray-700">
-                          Transaction ID
-                        </p>
-                        <a
-                          href={`https://solscan.io/tx/${initialize_swap_pool}?cluster=devnet`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all block overflow-x-auto whitespace-pre-wrap"
-                        >
-                          {initialize_swap_pool}
-                        </a>
+                    {/* Wrapped SOL & Token Inputs */}
+                    <div className="flex space-x-4">
+                      {/* Wrapped SOL Input */}
+                      <div className="w-1/2 relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) =>
+                            setInitialAmount0(new anchor.BN(e.target.value))
+                          }
+                          value={initial_amount0 === 0 ? "" : initial_amount0}
+                          placeholder="💰 Wrapped SOL (Lamport)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
+
+                      {/* Your Token Input */}
+                      <div className="w-1/2 relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) =>
+                            setInitialAmount1(new anchor.BN(e.target.value))
+                          }
+                          value={initial_amount1 === 0 ? "" : initial_amount1}
+                          placeholder="🪙 Your Token (Lamport)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-1">
+                    {/* Wallet 1 Input */}
+                    <div className="w-1/3 relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="number"
+                        onChange={(e) =>
+                          setAmountOut1(new anchor.BN(e.target.value))
+                        }
+                        value={amount_out1 === 0 ? "" : amount_out1}
+                        placeholder="💼 Wallet 1 (Lamport)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
+                    </div>
+
+                    {/* Wallet 2 Input */}
+                    <div className="w-1/3 relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="number"
+                        onChange={(e) =>
+                          setAmountOut2(new anchor.BN(e.target.value))
+                        }
+                        value={amount_out2 === 0 ? "" : amount_out2}
+                        placeholder="👜 Wallet 2 (Lamport)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
+                    </div>
+
+                    {/* Wallet 3 Input */}
+                    <div className="w-1/3 relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="number"
+                        onChange={(e) =>
+                          setAmountOut3(new anchor.BN(e.target.value))
+                        }
+                        value={amount_out3 === 0 ? "" : amount_out3}
+                        placeholder="🎒 Wallet 3 (Lamport)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Bundling Fee */}
+                    <div className="relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="number"
+                        onChange={(e) =>
+                          setJitoFee(new anchor.BN(e.target.value))
+                        }
+                        value={jito_fee === 0 ? "" : jito_fee}
+                        placeholder="💸 Bundling Fee to Jito (SOL: Lamport)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
+                    </div>
+
+                    <div className="flex space-x-4">
+                      {/* SOL for Bundling */}
+                      <div className="w-1/2 relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) =>
+                            setWsolBundling(new anchor.BN(e.target.value))
+                          }
+                          value={wsol_bundling === 0 ? "" : wsol_bundling}
+                          placeholder="📦 SOL for Bundling (Lamport)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
+
+                      {/* SOL for Distribution */}
+                      <div className="w-1/2 relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) =>
+                            setWsolDistribute(new anchor.BN(e.target.value))
+                          }
+                          value={wsol_distribute === 0 ? "" : wsol_distribute}
+                          placeholder="🎯 SOL for Distribution (Lamport)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl shadow-lg">
+                    {loading && (
+                      <div className="p-4 text-center text-gray-700">
+                        <p>⏳ Bundling transaction...</p>
                       </div>
                     )}
 
-                  {!loading && initialize_swap_pool === "Failed" && (
-                    <div className="p-4 bg-red-100 rounded-xl text-center">
-                      <p className="text-sm font-semibold text-red-700">
-                        ❌ Plz retry bundling transaction
-                      </p>
-                    </div>
-                  )}
+                    {!loading &&
+                      initialize_swap_pool &&
+                      initialize_swap_pool !== "Failed" && (
+                        <div className="p-4 bg-gray-100 rounded-xl">
+                          <p className="text-sm font-semibold text-gray-700">
+                            Transaction ID
+                          </p>
+                          <a
+                            href={`https://solscan.io/tx/${initialize_swap_pool}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 text-blue-600 hover:text-blue-500 break-all transition-all block overflow-x-auto whitespace-pre-wrap"
+                          >
+                            {initialize_swap_pool}
+                          </a>
+                        </div>
+                      )}
 
-                  <button
-                    onClick={initialize_and_swap}
-                    className={`w-full px-6 py-3 text-white font-bold rounded-xl shadow-lg transition-all mt-5 ${
-                      loading
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gradient-to-r from-green-500 to-teal-500 hover:shadow-2xl"
-                    }`}
-                    // disabled={loading} // Disable button while loading
-                  >
-                    {loading
-                      ? "⏳ Processing..."
-                      : "🏊‍♂️ Initialize New Pool And Swap"}
-                  </button>
+                    {!loading && initialize_swap_pool === "Failed" && (
+                      <div className="p-4 bg-red-100 rounded-xl text-center">
+                        <p className="text-sm font-semibold text-red-700">
+                          ❌ Plz retry bundling transaction
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={initialize_and_swap}
+                      className={`w-full px-6 py-3 text-white font-bold rounded-xl shadow-lg transition-all mt-5 ${
+                        loading
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-gradient-to-r from-green-500 to-teal-500 hover:shadow-2xl"
+                      }`}
+                      // disabled={loading} // Disable button while loading
+                    >
+                      {loading
+                        ? "⏳ Processing..."
+                        : "🏊‍♂️ Initialize New Pool And Swap"}
+                    </button>
+                  </div>
                 </div>
               </div>
+            </div>
+            {/* New Operation Section */}
+            <div className="max-w-7xl mx-auto bg-white shadow-lg p-10 rounded-3xl border border-gray-200 transition-all hover:shadow-2xl flex flex-col items-center text-center w-full lg:w-1/3">
+              <h2 className="text-3xl font-bold text-gray-800 flex items-center">
+                ⚙️ Operations
+              </h2>
+              <p className="text-gray-600 mt-2">
+                Manage and monitor your trades in real time.
+              </p>
+
+              <RealTimePriceChart />
+
+              <div className="mt-6 flex space-x-6">
+                <button
+                  className="px-6 py-3 bg-green-500 text-white rounded-xl shadow-md transition-all hover:bg-green-600 hover:shadow-lg"
+                  onClick={startBuying}
+                >
+                  🛒 Buy
+                </button>
+                <button
+                  className="px-6 py-3 bg-red-500 text-white rounded-xl shadow-md transition-all hover:bg-red-600 hover:shadow-lg"
+                  onClick={startSelling}
+                >
+                  📉 Sell
+                </button>
+                <button
+                  className="px-6 py-3 bg-yellow-500 text-white rounded-xl shadow-md transition-all hover:bg-yellow-600 hover:shadow-lg"
+                  onClick={stopTrading}
+                >
+                  ⏹️ Stop
+                </button>
+              </div>
+
+              <button
+                className="mt-6 px-8 py-3 bg-blue-500 text-white rounded-xl shadow-md transition-all hover:bg-blue-600 hover:shadow-lg"
+                onClick={withdrawSOLToMyWallet}
+              >
+                💰 Withdraw
+              </button>
             </div>
           </div>
         </div>

@@ -1,42 +1,110 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { getTokenBalance } from "./distribute";
 import { NATIVE_MINT } from "@solana/spl-token";
+import { tradingStateAtom } from "../state/atoms";
+import { getDefaultStore } from "jotai";
+import { delay } from "./distribute";
+import bs58 from "bs58";
 
-async function swapUntilPriceLimit(mint: string, allWallets: Keypair[]) {
+const store = getDefaultStore();
+
+export async function Sell(mint: string, allWallets: Keypair[]) {
   const TOKEN_MINT = new PublicKey(mint);
-  while (true) {
-    if (currentPrice >= targetPrice) {
-      console.log(`🎯 Target price ${targetPrice} reached. Stopping swaps.`);
-      break; // Stop if the price reaches the target
-    }
 
-    // Select a random wallet
+  while (store.get(tradingStateAtom) === "selling") {
     let randomIndex = Math.floor(Math.random() * allWallets.length);
     let wallet = allWallets[randomIndex];
 
-    // Get WSOL balance of the wallet
     let balance = await getTokenBalance(wallet.publicKey, TOKEN_MINT);
     if (balance <= 0) {
       console.warn(
-        `❌ Wallet ${wallet.publicKey.toBase58()} has no WSOL. Skipping...`
+        `❌ Wallet ${wallet.publicKey.toBase58()} has no Token. Skipping...`
       );
       continue;
     }
+    const wallet_secureKey = bs58.encode(wallet.secretKey);
 
-    // Determine a random swap amount (10%-50% of balance)
     let swapAmount = Math.min(
       balance,
       Math.floor(balance * (0.1 + Math.random() * 0.4))
     );
 
-    // Execute swap
     try {
-      await performSwap(wallet, swapAmount);
-      console.log(
-        `✅ Swapped ${swapAmount} WSOL from ${wallet.publicKey.toBase58()}`
-      );
+      const response = await fetch("/api/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletPrivateKey: wallet_secureKey,
+          amount: swapAmount,
+          mint: mint,
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        console.log(
+          `✅ Successfully swap ${swapAmount} tokens from ${wallet.publicKey.toBase58()}`
+        );
+      } else {
+        console.warn(
+          `❌ Swap failed for ${wallet.publicKey.toBase58()}:`,
+          result.error || "Unknown error"
+        );
+      }
     } catch (error) {
       console.warn(`❌ Swap failed for ${wallet.publicKey.toBase58()}:`, error);
     }
+
+    await delay(1000); // Small delay to avoid excessive looping
+  }
+}
+
+export async function Buy(mint: string, allWallets: Keypair[]) {
+  const TOKEN_MINT = new PublicKey(mint);
+
+  while (store.get(tradingStateAtom) === "buying") {
+    let randomIndex = Math.floor(Math.random() * allWallets.length);
+    let wallet = allWallets[randomIndex];
+
+    let balance = await getTokenBalance(wallet.publicKey, NATIVE_MINT);
+    if (balance <= 0) {
+      console.warn(
+        `❌ Wallet ${wallet.publicKey.toBase58()} has no Token. Skipping...`
+      );
+      continue;
+    }
+    const wallet_secureKey = bs58.encode(wallet.secretKey);
+
+    let swapAmount = Math.min(
+      balance,
+      Math.floor(balance * (0.1 + Math.random() * 0.4))
+    );
+
+    try {
+      const response = await fetch("/api/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletPrivateKey: wallet_secureKey,
+          amount: swapAmount,
+          mint: mint,
+        }),
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
+        console.log(
+          `✅ Successfully swap ${swapAmount} WSOL from ${wallet.publicKey.toBase58()}`
+        );
+      } else {
+        console.warn(
+          `❌ Swap failed for ${wallet.publicKey.toBase58()}:`,
+          result.error || "Unknown error"
+        );
+      }
+    } catch (error) {
+      console.warn(`❌ Swap failed for ${wallet.publicKey.toBase58()}:`, error);
+    }
+
+    await delay(1000); // Small delay to avoid excessive looping
   }
 }
