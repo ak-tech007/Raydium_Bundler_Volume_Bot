@@ -267,8 +267,6 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    console.log("payer2 ====>", bundle_wallets[1].publicKey);
-
     const transaction_swap2 = new Transaction();
     transaction_swap2.add(
       await program.methods

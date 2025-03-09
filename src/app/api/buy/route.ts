@@ -8,6 +8,8 @@ import { buyCustomTokens } from "@/lib/buyTokens";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    console.log(body)
     
     // Validate request data
     if (!body.walletPrivateKey || !body.amount || !body.mint) {
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
     const wallet = Keypair.fromSecretKey(
       bs58.decode(body.walletPrivateKey)
     );
-    const amount = parseFloat(body.amount);
+    const amount = new anchor.BN(body.amount);
     const mint = body.mint;
 
     // Execute the sell function

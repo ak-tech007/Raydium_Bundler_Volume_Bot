@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const wallet = Keypair.fromSecretKey(
       bs58.decode(body.walletPrivateKey)
     );
-    const amount = parseFloat(body.amount);
+    const amount = new anchor.BN(body.amount);
     const mint = body.mint;
 
     // Execute the sell function

@@ -628,7 +628,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            {/* New Operation Section */}
+
             <div className="max-w-7xl mx-auto bg-white shadow-lg p-10 rounded-3xl border border-gray-200 transition-all hover:shadow-2xl flex flex-col items-center text-center w-full lg:w-1/3">
               <h2 className="text-3xl font-bold text-gray-800 flex items-center">
                 ⚙️ Operations
@@ -660,7 +660,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Aligning "Total Sell" and "Withdraw" horizontally */}
               <div className="mt-6 flex space-x-6">
                 <button
                   className="px-8 py-3 bg-purple-500 text-white rounded-xl shadow-md transition-all hover:bg-purple-600 hover:shadow-lg"

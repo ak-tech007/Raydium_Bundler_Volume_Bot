@@ -136,7 +136,7 @@ export const buyCustomTokens = async (
 
     return signature;
   } catch (error) {
-    console.error("Sell transaction failed:", error);
+    console.error("buy transaction failed:", error);
     throw error;
   }
 };
