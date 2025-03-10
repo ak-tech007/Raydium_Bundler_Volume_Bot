@@ -8,21 +8,21 @@ import bs58 from "bs58";
 
 const store = getDefaultStore();
 
-export async function Sell(mint: string, allWallets: Keypair[]) {
+export async function Sell(mint: string, allWallets: string[]) {
   const TOKEN_MINT = new PublicKey(mint);
 
   while (store.get(tradingStateAtom) === "selling") {
     let randomIndex = Math.floor(Math.random() * allWallets.length);
-    let wallet = allWallets[randomIndex];
+    let wallet_privateKey = allWallets[randomIndex];
+    let wallet_keypair = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
 
-    let balance = await getTokenBalance(wallet.publicKey, TOKEN_MINT);
+    let balance = await getTokenBalance(wallet_keypair.publicKey, TOKEN_MINT);
     if (balance <= 0) {
       console.warn(
-        `❌ Wallet ${wallet.publicKey.toBase58()} has no Token. Skipping...`
+        `❌ Wallet ${wallet_keypair.publicKey.toBase58()} has no Token. Skipping...`
       );
       continue;
     }
-    const wallet_secureKey = bs58.encode(wallet.secretKey);
 
     let swapAmount = Math.min(
       balance,
@@ -34,7 +34,7 @@ export async function Sell(mint: string, allWallets: Keypair[]) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          walletPrivateKey: wallet_secureKey,
+          walletPrivateKey: wallet_privateKey,
           amount: swapAmount,
           mint: mint,
         }),
@@ -43,37 +43,39 @@ export async function Sell(mint: string, allWallets: Keypair[]) {
       const result = await response.json();
       if (response.ok && result.success) {
         console.log(
-          `✅ Successfully swap ${swapAmount} tokens from ${wallet.publicKey.toBase58()}`
+          `✅ Successfully swap ${swapAmount} tokens from ${wallet_keypair.publicKey.toBase58()}`
         );
       } else {
         console.warn(
-          `❌ Swap failed for ${wallet.publicKey.toBase58()}:`,
+          `❌ Swap failed for ${wallet_keypair.publicKey.toBase58()}:`,
           result.error || "Unknown error"
         );
       }
     } catch (error) {
-      console.warn(`❌ Swap failed for ${wallet.publicKey.toBase58()}:`, error);
+      console.warn(
+        `❌ Swap failed for ${wallet_keypair.publicKey.toBase58()}:`,
+        error
+      );
     }
 
     await delay(1000); // Small delay to avoid excessive looping
   }
 }
 
-export async function Buy(mint: string, allWallets: Keypair[]) {
+export async function Buy(mint: string, allWallets: string[]) {
   const TOKEN_MINT = new PublicKey(mint);
 
   while (store.get(tradingStateAtom) === "buying") {
     let randomIndex = Math.floor(Math.random() * allWallets.length);
-    let wallet = allWallets[randomIndex];
-
-    let balance = await getTokenBalance(wallet.publicKey, NATIVE_MINT);
+    let wallet_privateKey = allWallets[randomIndex];
+    let wallet_keypair = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+    let balance = await getTokenBalance(wallet_keypair.publicKey, NATIVE_MINT);
     if (balance <= 0) {
       console.warn(
-        `❌ Wallet ${wallet.publicKey.toBase58()} has no Token. Skipping...`
+        `❌ Wallet ${wallet_keypair.publicKey.toBase58()} has no Token. Skipping...`
       );
       continue;
     }
-    const wallet_secureKey = bs58.encode(wallet.secretKey);
 
     let swapAmount = Math.min(
       balance,
@@ -86,7 +88,7 @@ export async function Buy(mint: string, allWallets: Keypair[]) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          walletPrivateKey: wallet_secureKey,
+          walletPrivateKey: wallet_privateKey,
           amount: swapAmount,
           mint: mint,
         }),
@@ -94,23 +96,26 @@ export async function Buy(mint: string, allWallets: Keypair[]) {
       const result = await response.json();
       if (response.ok && result.success) {
         console.log(
-          `✅ Successfully swap ${swapAmount} WSOL from ${wallet.publicKey.toBase58()}`
+          `✅ Successfully swap ${swapAmount} WSOL from ${wallet_keypair.publicKey.toBase58()}`
         );
       } else {
         console.warn(
-          `❌ Swap failed for ${wallet.publicKey.toBase58()}:`,
+          `❌ Swap failed for ${wallet_keypair.publicKey.toBase58()}:`,
           result.error || "Unknown error"
         );
       }
     } catch (error) {
-      console.warn(`❌ Swap failed for ${wallet.publicKey.toBase58()}:`, error);
+      console.warn(
+        `❌ Swap failed for ${wallet_keypair.publicKey.toBase58()}:`,
+        error
+      );
     }
 
     await delay(1000); // Small delay to avoid excessive looping
   }
 }
 
-export async function Sell_Once(mint: string, allWallets: Keypair[]) {
+export async function Sell_Once(mint: string, allWallets: string[]) {
   const TOKEN_MINT = new PublicKey(mint);
 
   const target_wallet = await concentrateTokens(TOKEN_MINT, allWallets);
@@ -125,6 +130,7 @@ export async function Sell_Once(mint: string, allWallets: Keypair[]) {
   const wallet_secureKey = bs58.encode(target_wallet.secretKey);
 
   let swapAmount = balance;
+  console.log(swapAmount);
 
   try {
     const response = await fetch("/api/sellonce", {

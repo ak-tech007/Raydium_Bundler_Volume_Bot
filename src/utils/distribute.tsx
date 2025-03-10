@@ -1,4 +1,5 @@
 import {
+  vaultsAtom,
   walletsForAllAtom,
   walletsForBundlingAtom,
   walletsForRemainingAtom,
@@ -25,6 +26,8 @@ import {
 } from "@solana/web3.js";
 import { getDefaultStore } from "jotai";
 import * as dotenv from "dotenv";
+import * as anchor from "@project-serum/anchor";
+import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 dotenv.config();
 
 const store = getDefaultStore();
@@ -35,10 +38,11 @@ const connection = new Connection(
   "confirmed"
 );
 
-async function distributeSOLForFee(wallet: any, wallets: Keypair[]) {
+async function distributeSOLForFee(wallet: any, wallets: string[]) {
   try {
     // Step 1: Transfer SOL from Phantom to 3 wallets
-    const firstWallet = wallets[0];
+    const firstWallet_keypair = wallets[0];
+    const firstWallet = Keypair.fromSecretKey(bs58.decode(firstWallet_keypair));
     const totalSOLToTransfer = 0.1 * 1e9;
 
     await transferSOLFromPhantom(
@@ -54,12 +58,14 @@ async function distributeSOLForFee(wallet: any, wallets: Keypair[]) {
     const solPerFinalWallet = Math.floor(totalSOLToTransfer / totalWallets);
     const minFee = 10000;
 
-    for (const receiver of wallets) {
+    for (const receiver_privatekey of wallets) {
+      const receiver = Keypair.fromSecretKey(bs58.decode(receiver_privatekey));
+
       const balance = await connection.getBalance(firstWallet.publicKey);
 
       // If balance is too low, request SOL from Phantom wallet
       if (balance < minFee) {
-        const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
+        const topUpAmount = minFee - balance + 1000000; // Send a bit extra to avoid issues
         await transferSOLFromPhantom(
           wallet.publicKey,
           firstWallet.publicKey,
@@ -304,15 +310,16 @@ async function unwrapSOL(wallet: Keypair) {
 
 async function execute_wrapping_sol_bundling(
   phantom: any,
-  wallets: Keypair[],
+  wallets: string[],
   amount: number
 ) {
+  const first_wallet = Keypair.fromSecretKey(bs58.decode(wallets[0]));
   try {
     // Step 1: Transfer SOL from Phantom to First Wallet
     const totalSOLToTransfer = amount; // Example: 0.3 SOL total
     await transferSOLFromPhantom(
       phantom.publicKey,
-      wallets[0].publicKey,
+      first_wallet.publicKey,
       totalSOLToTransfer,
       phantom
     );
@@ -321,29 +328,31 @@ async function execute_wrapping_sol_bundling(
 
     // Step 2: Distribute from First Wallet to all 3 wallets equally
     const solPerWallet = Math.floor(totalSOLToTransfer / wallets.length);
-    for (const wallet of wallets) {
-      const balance = await connection.getBalance(wallets[0].publicKey);
+    for (const wallet_keypair of wallets) {
+      const wallet = Keypair.fromSecretKey(bs58.decode(wallet_keypair));
+      const balance = await connection.getBalance(first_wallet.publicKey);
 
       // If balance is too low, request SOL from Phantom wallet
       if (balance < transaction_fee) {
-        const topUpAmount = transaction_fee - balance + 10000; // Send a bit extra to avoid issues
+        const topUpAmount = transaction_fee - balance + 1000000; // Send a bit extra to avoid issues
         await transferSOLFromPhantom(
           phantom.publicKey,
-          wallets[0].publicKey,
+          first_wallet.publicKey,
           topUpAmount,
           phantom
         );
       }
       await transferSOL(
-        wallets[0].publicKey,
+        first_wallet.publicKey,
         wallet.publicKey,
         solPerWallet,
-        wallets[0]
+        first_wallet
       );
     }
 
     // Step 3: Wrap SOL in each wallet
-    for (const wallet of wallets) {
+    for (const wallet_keypair of wallets) {
+      const wallet = Keypair.fromSecretKey(bs58.decode(wallet_keypair));
       await wrapSOL(wallet, solPerWallet);
     }
   } catch (error) {
@@ -353,15 +362,16 @@ async function execute_wrapping_sol_bundling(
 
 async function execute_randomly_wrapping_sol(
   phantom: any,
-  wallets: Keypair[],
+  wallets: string[],
   amount: number
 ) {
+  const first_wallet = Keypair.fromSecretKey(bs58.decode(wallets[0]));
   try {
     // Step 1: Transfer SOL from Phantom to First Wallet
     const totalSOLToTransfer = amount; // Example: 0.3 SOL total
     await transferSOLFromPhantom(
       phantom.publicKey,
-      wallets[0].publicKey,
+      first_wallet.publicKey,
       totalSOLToTransfer,
       phantom
     );
@@ -373,43 +383,34 @@ async function execute_randomly_wrapping_sol(
     );
     const minFee = 10000;
     let i = 0;
-    for (const wallet of wallets) {
-      const balance = await connection.getBalance(wallets[0].publicKey);
+    for (const wallet_keypair of wallets) {
+      const wallet = Keypair.fromSecretKey(bs58.decode(wallet_keypair));
+      const balance = await connection.getBalance(first_wallet.publicKey);
 
       // If balance is too low, request SOL from Phantom wallet
       if (balance < minFee) {
-        const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
+        const topUpAmount = minFee - balance + 1000000; // Send a bit extra to avoid issues
         await transferSOLFromPhantom(
           phantom.publicKey,
-          wallets[0].publicKey,
+          first_wallet.publicKey,
           topUpAmount,
           phantom
         );
       }
       await transferSOL(
-        wallets[0].publicKey,
+        first_wallet.publicKey,
         wallet.publicKey,
         distribute[i],
-        wallets[0]
+        first_wallet
       );
       i += 1;
     }
 
     let j = 0;
     // Step 3: Wrap SOL in each wallet
-    for (const wallet of wallets) {
-      const balance = await connection.getBalance(wallets[0].publicKey);
+    for (const wallet_keypair of wallets) {
+      const wallet = Keypair.fromSecretKey(bs58.decode(wallet_keypair));
 
-      // If balance is too low, request SOL from Phantom wallet
-      if (balance < minFee) {
-        const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
-        await transferSOLFromPhantom(
-          phantom.publicKey,
-          wallets[0].publicKey,
-          topUpAmount,
-          phantom
-        );
-      }
       await wrapSOL(wallet, distribute[j]);
       j += 1;
     }
@@ -435,9 +436,10 @@ async function generateRandomWalletKeypair(num: number) {
   return wallets;
 }
 
-async function initializingATA(wallets: Keypair[], mint: string, phantom: any) {
+async function initializingATA(wallets: string[], mint: string, phantom: any) {
   const minFee = 10000;
-  for (const wallet of wallets) {
+  for (const wallet_privateKey of wallets) {
+    const wallet = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
     const associatedTokenAccount_Wsol = await getAssociatedTokenAddress(
       NATIVE_MINT,
       wallet.publicKey
@@ -450,7 +452,7 @@ async function initializingATA(wallets: Keypair[], mint: string, phantom: any) {
 
     // If balance is too low, request SOL from Phantom wallet
     if (balance < minFee) {
-      const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
+      const topUpAmount = minFee - balance + 1000000; // Send a bit extra to avoid issues
       await transferSOLFromPhantom(
         phantom.publicKey,
         wallet.publicKey,
@@ -542,11 +544,21 @@ async function transferTokenFromWalletToWallet(
 }
 
 export async function distributeTokens(
-  sourceWallets: Keypair[],
-  allWallets: Keypair[],
+  sourceWallets_keypair: string[],
+  allWallets_keypair: string[],
   mint: string,
   phantom: any
 ) {
+  let sourceWallets: Keypair[] = [];
+  let allWallets: Keypair[] = [];
+  sourceWallets_keypair.forEach((wallet_privateKey) => {
+    const wallet = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+    sourceWallets.push(wallet);
+  });
+  allWallets_keypair.forEach((wallet_privateKey) => {
+    const wallet = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+    allWallets.push(wallet);
+  });
   const TOKEN_MINT: PublicKey = new PublicKey(mint);
   // Fetch total token balances from 3 wallets
   let balances = await Promise.all(
@@ -583,7 +595,7 @@ export async function distributeTokens(
 
           // If balance is too low, request SOL from Phantom wallet
           if (balance < minFee) {
-            const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
+            const topUpAmount = minFee - balance + 1000000; // Send a bit extra to avoid issues
             await transferSOLFromPhantom(
               phantom.publicKey,
               sourceWallet.publicKey,
@@ -618,14 +630,22 @@ function createRandomWallet(): Keypair {
   return Keypair.generate();
 }
 
-export async function unwrapAllWSOL(wallets: Keypair[], phantom: any) {
+export async function unwrapAllWSOL(
+  wallets_privateKey: string[],
+  phantom: any
+) {
+  let wallets: Keypair[] = [];
+  wallets_privateKey.forEach((wallet_privateKey) => {
+    const wallet = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+    wallets.push(wallet);
+  });
   const minFee = 10000;
   for (const wallet of wallets) {
     const balance = await connection.getBalance(wallet.publicKey);
 
     // If balance is too low, request SOL from Phantom wallet
     if (balance < minFee) {
-      const topUpAmount = minFee - balance + 10000; // Send a bit extra to avoid issues
+      const topUpAmount = minFee - balance + 1000000; // Send a bit extra to avoid issues
       await transferSOLFromPhantom(
         phantom.publicKey,
         wallet.publicKey,
@@ -637,7 +657,29 @@ export async function unwrapAllWSOL(wallets: Keypair[], phantom: any) {
   }
 }
 
-export async function withdrawSOL(wallets: Keypair[], phantom: any) {
+export const saveWalletsToFile = async () => {
+  const data = {
+    walletsForBundling: store.get(walletsForBundlingAtom),
+    walletsForAll: store.get(walletsForAllAtom),
+    walletsForRemaining: store.get(walletsForRemainingAtom),
+    vaults: store.get(vaultsAtom),
+  };
+
+  await fetch("/api/save-wallets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  console.log("Data saved successfully.");
+};
+
+export async function withdrawSOL(Wallets_keypair: string[], phantom: any) {
+  let wallets: Keypair[] = [];
+  Wallets_keypair.forEach((wallet_privateKey) => {
+    const wallet = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+    wallets.push(wallet);
+  });
   for (const wallet of wallets) {
     const balance = await connection.getBalance(wallet.publicKey);
 
@@ -688,10 +730,14 @@ export async function withdrawSOL(wallets: Keypair[], phantom: any) {
 
 export const concentrateTokens = async (
   tokenMint: PublicKey,
-  wallets: Keypair[]
+  wallets: string[]
 ) => {
   // ✅ Step 1: Select a random wallet to receive tokens
-  const receiverWallet = wallets[Math.floor(Math.random() * wallets.length)];
+  const receiverWallet_privateKey =
+    wallets[Math.floor(Math.random() * wallets.length)];
+  const receiverWallet = Keypair.fromSecretKey(
+    bs58.decode(receiverWallet_privateKey)
+  );
   console.log(
     `🎯 Chosen Receiver Wallet: ${receiverWallet.publicKey.toBase58()}`
   );
@@ -703,7 +749,10 @@ export const concentrateTokens = async (
   );
 
   // ✅ Step 3: Transfer all tokens from other wallets to the receiver
-  for (const senderWallet of wallets) {
+  for (const senderWallet_keypair of wallets) {
+    const senderWallet = Keypair.fromSecretKey(
+      bs58.decode(senderWallet_keypair)
+    );
     if (senderWallet === receiverWallet) continue; // Skip the receiver itself
 
     const senderATA = await getAssociatedTokenAddress(
@@ -713,7 +762,7 @@ export const concentrateTokens = async (
 
     try {
       const senderAccount = await getAccount(connection, senderATA);
-      const balance = Number(senderAccount.amount);
+      const balance = BigInt(senderAccount.amount);
 
       if (balance > 0) {
         const maxRetries = 3; // Maximum retry attempts
@@ -724,6 +773,7 @@ export const concentrateTokens = async (
             console.log(
               `🔄 Sending ${balance} tokens from ${senderWallet.publicKey.toBase58()} to ${receiverATA.toBase58()}`
             );
+
             // Create transaction
             const tx = new Transaction().add(
               createTransferInstruction(
@@ -785,12 +835,20 @@ export async function preprocess(
   Wsol_bundling: number,
   Wsol_distribute: number
 ) {
-  const wallets = await generateRandomWalletKeypair(10);
-  const wallets1: Keypair[] = wallets.slice(0, 3); // First 3 wallets
-  const wallets2: Keypair[] = wallets.slice(3);
+  let wallets: string[] = [];
+  const wallet_keypairs = await generateRandomWalletKeypair(10);
+  wallet_keypairs.forEach((keypair) => {
+    const privateKeyBase58 = bs58.encode(keypair.secretKey);
+    wallets.push(privateKeyBase58);
+  });
+
+  const wallets1: string[] = wallets.slice(0, 3); // First 3 wallets
+  const wallets2: string[] = wallets.slice(3);
   store.set(walletsForBundlingAtom, wallets1);
   store.set(walletsForRemainingAtom, wallets2);
   store.set(walletsForAllAtom, wallets);
+  console.log("store save");
+  await saveWalletsToFile();
   await distributeSOLForFee(wallet, wallets);
   await initializingATA(wallets, mint, wallet);
   await execute_wrapping_sol_bundling(wallet, wallets1, Wsol_bundling);

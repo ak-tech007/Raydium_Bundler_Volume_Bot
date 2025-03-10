@@ -20,6 +20,7 @@ import {
   distributeTokens,
   getTokenBalance,
   preprocess,
+  saveWalletsToFile,
   unwrapAllWSOL,
   withdrawSOL,
 } from "@/utils/distribute";
@@ -28,6 +29,9 @@ import {
   tradingStateAtom,
   walletsForAllAtom,
   walletsForBundlingAtom,
+  walletsForRemainingAtom,
+  vaultsAtom,
+  initializeStore,
 } from "../state/atoms";
 
 import RealTimePriceChart from "./_components/RealTimePriceChart";
@@ -73,8 +77,10 @@ export default function Home() {
   const startSelling = async () => {
     store.set(tradingStateAtom, "selling");
     const all_wallets = await store.get(walletsForAllAtom);
+
     // Wait until tradingStateAtom is "selling"
     await waitForCondition(() => store.get(tradingStateAtom) === "selling");
+    console.log(all_wallets, mint_address);
     await Sell(mint_address, all_wallets);
   };
 
@@ -222,11 +228,15 @@ export default function Home() {
     }
   };
   useEffect(() => {
-    setIsClient(true);
-    if (!wallet.connected && session) {
-      signOut();
-    }
-    getWSOLBalance();
+    (async () => {
+      setIsClient(true);
+      if (!wallet.connected && session) {
+        signOut();
+      }
+      getWSOLBalance();
+
+      await initializeStore(store);
+    })();
   }, [wallet.connected]);
 
   async function initialize_and_swap() {
@@ -246,9 +256,10 @@ export default function Home() {
         amount_out2: amount_out2,
         amount_out3: amount_out3,
         jito_fee: jito_fee,
-        bundle_wallets: bundle_wallets,
+        bundle_wallets_privatekey: bundle_wallets,
       });
       setInitializeSwapPool(tx);
+      await saveWalletsToFile();
 
       await distributeTokens(bundle_wallets, all_wallets, mint_address, wallet);
     }
@@ -274,9 +285,7 @@ export default function Home() {
         <div className="min-h-screen bg-gray-100 p-10 flex flex-col gap-10">
           <div className="max-w-full mx-auto flex flex-col lg:flex-row gap-12">
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-12">
-              {/* Token Creation Form */}
               <div className="w-full max-w-3xl mx-auto bg-white shadow-lg p-10 rounded-3xl border border-gray-200 transition-all hover:shadow-2xl">
-                {/* Title */}
                 <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   🚀 Create Your Token
                 </h1>
@@ -372,7 +381,7 @@ export default function Home() {
                 <div className="flex flex-col space-y-4 mt-6 text-sm">
                   <div className="p-4 bg-gray-100 rounded-xl shadow-sm border">
                     <p className="font-semibold text-gray-700">
-                      🪙 Token Mint Address
+                      🥇 Token Mint Address
                     </p>
                     <p className="text-gray-500 break-all">{mint}</p>
                   </div>
@@ -440,7 +449,7 @@ export default function Home() {
                           : "bg-gray-300 text-gray-500 cursor-not-allowed"
                       }`}
                     >
-                      🪙 Wrap {w_amount || "0"} SOL
+                      🥇 Wrap {w_amount || "0"} SOL
                     </button>
                   </div>
                 </div>
@@ -487,7 +496,7 @@ export default function Home() {
                             setInitialAmount1(new anchor.BN(e.target.value))
                           }
                           value={initial_amount1 === 0 ? "" : initial_amount1}
-                          placeholder="🪙 Your Token (Lamport)"
+                          placeholder="🥇 Your Token (Lamport)"
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
                         />
                       </div>

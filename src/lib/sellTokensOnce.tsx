@@ -22,6 +22,8 @@ export const sellCustomTokensOnce = async (
   amount: number,
   mint: string
 ) => {
+  const balance = await connection.getBalance(wallet.publicKey);
+  console.log("wallet balance:", balance);
   const wallet_ = new Wallet(wallet);
   const provider = new anchor.AnchorProvider(
     connection,

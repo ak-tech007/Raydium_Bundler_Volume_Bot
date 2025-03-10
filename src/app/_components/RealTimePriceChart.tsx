@@ -13,7 +13,7 @@ import { vaultsAtom } from "../../state/atoms";
 import { getTokenBalance } from "../../utils/distribute";
 import { useStore } from "jotai";
 import { getAccount } from "@solana/spl-token";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 type DataPoint = { time: string; price: number };
 
@@ -58,8 +58,14 @@ const LiquidityPoolChart = () => {
       return 0;
     }
 
-    const account0 = await getAccount(connection, vaults.token0Vault);
-    const account1 = await getAccount(connection, vaults.token1Vault);
+    const account0 = await getAccount(
+      connection,
+      new PublicKey(vaults.token0Vault)
+    );
+    const account1 = await getAccount(
+      connection,
+      new PublicKey(vaults.token1Vault)
+    );
 
     // Fetch token balances from blockchain
     const token0Balance = Number(account0.amount);
@@ -82,7 +88,7 @@ const LiquidityPoolChart = () => {
     <div className="w-full bg-white rounded-xl shadow-md mt-6 p-6">
       {/* Liquidity Pool Info */}
       <div className="flex justify-between mb-4 text-gray-700 text-sm font-semibold">
-        <span>🪙 Token Amount: {tokenAmount}</span>
+        <span>🥇 Token Amount: {tokenAmount}</span>
         <span>💰 WSOL in LP: {wsolAmount}</span>
         <span>📈 Token Price: {currentPrice} SOL</span>
       </div>
