@@ -222,7 +222,10 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     const transaction_swap1 = new Transaction();
     transaction_swap1.add(
       await program.methods
-        .swapBaseOut(new anchor.BN(max_amount_in_1), new anchor.BN(amount_out1))
+        .swapBaseOut(
+          new anchor.BN(BigInt(max_amount_in_1)),
+          new anchor.BN(BigInt(amount_out1) * BigInt(10 ** 6))
+        )
         .accounts({
           cpSwapProgram: programId,
           payer: bundle_wallets[0].publicKey,
@@ -311,7 +314,10 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     const transaction_swap2 = new Transaction();
     transaction_swap2.add(
       await program.methods
-        .swapBaseOut(new anchor.BN(max_amount_in_2), new anchor.BN(amount_out2))
+        .swapBaseOut(
+          new anchor.BN(BigInt(max_amount_in_2)),
+          new anchor.BN(BigInt(amount_out2) * BigInt(10 ** 6))
+        )
         .accounts({
           cpSwapProgram: programId,
           payer: bundle_wallets[1].publicKey,
@@ -364,7 +370,10 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     const transaction_swap3 = new Transaction();
     transaction_swap3.add(
       await program.methods
-        .swapBaseOut(new anchor.BN(max_amount_in_3), new anchor.BN(amount_out3))
+        .swapBaseOut(
+          new anchor.BN(BigInt(max_amount_in_3)),
+          new anchor.BN(BigInt(amount_out3) * BigInt(10 ** 6))
+        )
         .accounts({
           cpSwapProgram: programId,
           payer: bundle_wallets[2].publicKey,

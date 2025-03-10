@@ -32,6 +32,7 @@ import {
   walletsForRemainingAtom,
   vaultsAtom,
   initializeStore,
+  walletAddressAtom,
 } from "../state/atoms";
 
 import RealTimePriceChart from "./_components/RealTimePriceChart";
@@ -77,11 +78,11 @@ export default function Home() {
   const startSelling = async () => {
     store.set(tradingStateAtom, "selling");
     const all_wallets = await store.get(walletsForAllAtom);
+    const wallet_address = await store.get(walletAddressAtom);
 
     // Wait until tradingStateAtom is "selling"
     await waitForCondition(() => store.get(tradingStateAtom) === "selling");
-    console.log(all_wallets, mint_address);
-    await Sell(mint_address, all_wallets);
+    await Sell(wallet_address, all_wallets);
   };
 
   const waitForCondition = async (condition: () => boolean, interval = 100) => {
@@ -97,14 +98,16 @@ export default function Home() {
   const startBuying = async () => {
     store.set(tradingStateAtom, "buying");
     const all_wallets = await store.get(walletsForAllAtom);
+    const wallet_address = await store.get(walletAddressAtom);
     await waitForCondition(() => store.get(tradingStateAtom) === "buying");
-    await Buy(mint_address, all_wallets);
+    await Buy(wallet_address, all_wallets);
   };
 
   const totalSell = async () => {
     store.set(tradingStateAtom, "idle");
     const all_wallets = await store.get(walletsForAllAtom);
-    await Sell_Once(mint_address, all_wallets);
+    const wallet_address = await store.get(walletAddressAtom);
+    await Sell_Once(wallet_address, all_wallets);
   };
 
   const connection = new Connection(

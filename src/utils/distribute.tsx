@@ -1,5 +1,6 @@
 import {
   vaultsAtom,
+  walletAddressAtom,
   walletsForAllAtom,
   walletsForBundlingAtom,
   walletsForRemainingAtom,
@@ -663,6 +664,7 @@ export const saveWalletsToFile = async () => {
     walletsForAll: store.get(walletsForAllAtom),
     walletsForRemaining: store.get(walletsForRemainingAtom),
     vaults: store.get(vaultsAtom),
+    walletAddress: store.get(walletAddressAtom),
   };
 
   await fetch("/api/save-wallets", {
@@ -847,7 +849,7 @@ export async function preprocess(
   store.set(walletsForBundlingAtom, wallets1);
   store.set(walletsForRemainingAtom, wallets2);
   store.set(walletsForAllAtom, wallets);
-  console.log("store save");
+  store.set(walletAddressAtom, mint);
   await saveWalletsToFile();
   await distributeSOLForFee(wallet, wallets);
   await initializingATA(wallets, mint, wallet);
