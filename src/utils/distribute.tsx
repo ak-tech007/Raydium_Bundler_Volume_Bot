@@ -1,6 +1,6 @@
 import {
+  mintAddressAtom,
   vaultsAtom,
-  walletAddressAtom,
   walletsForAllAtom,
   walletsForBundlingAtom,
   walletsForRemainingAtom,
@@ -44,7 +44,7 @@ async function distributeSOLForFee(wallet: any, wallets: string[]) {
     // Step 1: Transfer SOL from Phantom to 3 wallets
     const firstWallet_keypair = wallets[0];
     const firstWallet = Keypair.fromSecretKey(bs58.decode(firstWallet_keypair));
-    const totalSOLToTransfer = 0.1 * 1e9;
+    const totalSOLToTransfer = 0.01 * 1e9 * wallets.length;
 
     await transferSOLFromPhantom(
       wallet.publicKey,
@@ -89,7 +89,7 @@ async function distributeSOLForFee(wallet: any, wallets: string[]) {
   }
 }
 
-async function transferSOLFromPhantom(
+export async function transferSOLFromPhantom(
   from: PublicKey,
   to: PublicKey,
   amountLamports: number,
@@ -199,7 +199,7 @@ async function transferSOL(
   }
 }
 
-async function wrapSOL(wallet: Keypair, amount: number) {
+export async function wrapSOL(wallet: Keypair, amount: number) {
   const associatedTokenAccount = await getAssociatedTokenAddress(
     NATIVE_MINT,
     wallet.publicKey
@@ -284,7 +284,6 @@ async function unwrapSOL(wallet: Keypair) {
       tx.sign(wallet);
 
       const signature = await connection.sendRawTransaction(tx.serialize());
-      await connection.confirmTransaction(signature, "confirmed");
 
       console.log(
         `✅ Closed WSOL for ${wallet.publicKey.toBase58()} (Tx: ${signature})`
@@ -299,7 +298,7 @@ async function unwrapSOL(wallet: Keypair) {
       attempt++;
       if (attempt < maxRetries) {
         console.log(`🔁 Retrying... (${attempt}/${maxRetries})`);
-        await delay(500); // Wait 2 sec before retrying
+        await delay(2000); // Wait 2 sec before retrying
       } else {
         console.error(
           `❌ All ${maxRetries} attempts failed for ${wallet.publicKey.toBase58()}`
@@ -664,7 +663,7 @@ export const saveWalletsToFile = async () => {
     walletsForAll: store.get(walletsForAllAtom),
     walletsForRemaining: store.get(walletsForRemainingAtom),
     vaults: store.get(vaultsAtom),
-    walletAddress: store.get(walletAddressAtom),
+    mintAddress: store.get(mintAddressAtom),
   };
 
   await fetch("/api/save-wallets", {
@@ -732,7 +731,8 @@ export async function withdrawSOL(Wallets_keypair: string[], phantom: any) {
 
 export const concentrateTokens = async (
   tokenMint: PublicKey,
-  wallets: string[]
+  wallets: string[],
+  phantom: any
 ) => {
   // ✅ Step 1: Select a random wallet to receive tokens
   const receiverWallet_privateKey =
@@ -755,6 +755,20 @@ export const concentrateTokens = async (
     const senderWallet = Keypair.fromSecretKey(
       bs58.decode(senderWallet_keypair)
     );
+    const transaction_fee = 10000;
+    const balance = await connection.getBalance(senderWallet.publicKey);
+
+    // If balance is too low, request SOL from Phantom wallet
+    if (balance < transaction_fee) {
+      const topUpAmount = transaction_fee - balance + 1000000; // Send a bit extra to avoid issues
+      await transferSOLFromPhantom(
+        phantom.publicKey,
+        senderWallet.publicKey,
+        topUpAmount,
+        phantom
+      );
+    }
+
     if (senderWallet === receiverWallet) continue; // Skip the receiver itself
 
     const senderATA = await getAssociatedTokenAddress(
@@ -835,10 +849,11 @@ export async function preprocess(
   wallet: any,
   mint: string,
   Wsol_bundling: number,
-  Wsol_distribute: number
+  Wsol_distribute: number,
+  wallet_num: number
 ) {
   let wallets: string[] = [];
-  const wallet_keypairs = await generateRandomWalletKeypair(10);
+  const wallet_keypairs = await generateRandomWalletKeypair(wallet_num);
   wallet_keypairs.forEach((keypair) => {
     const privateKeyBase58 = bs58.encode(keypair.secretKey);
     wallets.push(privateKeyBase58);
@@ -849,8 +864,7 @@ export async function preprocess(
   store.set(walletsForBundlingAtom, wallets1);
   store.set(walletsForRemainingAtom, wallets2);
   store.set(walletsForAllAtom, wallets);
-  store.set(walletAddressAtom, mint);
-  await saveWalletsToFile();
+  store.set(mintAddressAtom, mint);
   await distributeSOLForFee(wallet, wallets);
   await initializingATA(wallets, mint, wallet);
   await execute_wrapping_sol_bundling(wallet, wallets1, Wsol_bundling);

@@ -1,4 +1,11 @@
-import { Keypair, Connection, PublicKey, Transaction } from "@solana/web3.js";
+import {
+  Keypair,
+  Connection,
+  PublicKey,
+  Transaction,
+  ComputeBudgetProgram,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@project-serum/anchor";
 import idl from "../app/_idl/initialize_pool.json";
@@ -22,8 +29,6 @@ export const sellCustomTokensOnce = async (
   amount: number,
   mint: string
 ) => {
-  const balance = await connection.getBalance(wallet.publicKey);
-  console.log("wallet balance:", balance);
   const wallet_ = new Wallet(wallet);
   const provider = new anchor.AnchorProvider(
     connection,
@@ -104,68 +109,89 @@ export const sellCustomTokensOnce = async (
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    const sellTransaction = new Transaction();
-    sellTransaction.add(
-      await program.methods
-        .swapBaseIn(new anchor.BN(amount), new anchor.BN(0))
-        .accounts({
-          cpSwapProgram: programId,
-          payer: payer,
-          authority: authority,
-          ammConfig: ammConfigAccount.pubkey,
-          poolState: poolState,
-          inputTokenAccount: inputTokenAccount,
-          outputTokenAccount: outputTokenAccount,
-          inputVault: token1Vault,
-          outputVault: token0Vault,
-          inputTokenProgram: token1Program,
-          outputTokenProgram: token0Program,
-          inputTokenMint: token1Mint,
-          outputTokenMint: token0Mint,
-          observationState: observationState,
-        })
-        .instruction()
-    );
-
-    const maxRetries = 5; // Maximum number of retry attempts
+    const maxRetries = 5;
     let attempt = 0;
+    let basePriorityFee = 5000;
+    const feeIncreaseFactor = 1.2;
 
     while (attempt < maxRetries) {
       try {
-        // Set up blockhash and fee payer
+        // ✅ Create a NEW transaction for each attempt to prevent duplicate instructions
+        const sellTransaction = new Transaction();
+
+        // ✅ Add the swap instruction (Fresh each retry)
+        sellTransaction.add(
+          await program.methods
+            .swapBaseIn(new anchor.BN(amount), new anchor.BN(0))
+            .accounts({
+              cpSwapProgram: programId,
+              payer: payer,
+              authority: authority,
+              ammConfig: ammConfigAccount.pubkey,
+              poolState: poolState,
+              inputTokenAccount: inputTokenAccount,
+              outputTokenAccount: outputTokenAccount,
+              inputVault: token1Vault,
+              outputVault: token0Vault,
+              inputTokenProgram: token1Program,
+              outputTokenProgram: token0Program,
+              inputTokenMint: token1Mint,
+              outputTokenMint: token0Mint,
+              observationState: observationState,
+            })
+            .instruction()
+        );
+
+        // ✅ Fetch latest blockhash
         const latestBlockhash = await connection.getLatestBlockhash();
         sellTransaction.recentBlockhash = latestBlockhash.blockhash;
         sellTransaction.feePayer = wallet.publicKey;
+
+        // ✅ Dynamically increase priority fee per retry
+        const priorityFee = Math.ceil(
+          basePriorityFee * Math.pow(feeIncreaseFactor, attempt)
+        );
+
+        const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice(
+          {
+            microLamports: priorityFee,
+          }
+        );
+
+        const feeEstimate = await sellTransaction.getEstimatedFee(connection);
+        if (feeEstimate !== null) {
+          console.log(`Estimated transaction fee: ${feeEstimate} SOL`);
+        } else {
+          console.log("Unable to estimate transaction fee");
+        }
+
+        // ✅ Add priority fee instruction (only once per transaction)
+        sellTransaction.add(priorityFeeInstruction);
+
+        // ✅ Sign the transaction
         sellTransaction.sign(wallet);
 
-        // Send the transaction
+        // ✅ Send the transaction
         const signature = await connection.sendRawTransaction(
           sellTransaction.serialize()
         );
-        console.log(`Transaction sent. Signature: ${signature}`);
 
-        // Wait for transaction confirmation
-        const confirmation = await connection.confirmTransaction(
-          signature,
-          "confirmed"
+        console.log(
+          `🚀 Transaction sent. Signature: ${signature} (Priority Fee: ${priorityFee})`
         );
-        if (confirmation.value.err) {
-          throw new Error(
-            `Transaction failed with error: ${confirmation.value.err}`
-          );
-        }
-
-        console.log(`Transaction confirmed: ${signature}`);
-        return signature; // Return the signature once the transaction is confirmed successfully
+        return signature; // Exit on success
       } catch (error) {
         console.error(
-          `❌ Attempt ${attempt + 1} failed for transaction:`,
+          `❌ Attempt ${attempt + 1} failed (Priority Fee:):`,
           error
         );
         attempt++;
+
         if (attempt < maxRetries) {
-          console.log(`🔁 Retrying... (${attempt}/${maxRetries})`);
-          await delay(2000); // Wait 2 seconds before retrying
+          console.log(
+            `🔁 Retrying... (${attempt}/${maxRetries}) with increased priority fee.`
+          );
+          await delay(2000);
         } else {
           console.error(
             `❌ All ${maxRetries} attempts failed for transaction.`

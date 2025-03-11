@@ -32,7 +32,7 @@ import {
   walletsForRemainingAtom,
   vaultsAtom,
   initializeStore,
-  walletAddressAtom,
+  mintAddressAtom,
 } from "../state/atoms";
 
 import RealTimePriceChart from "./_components/RealTimePriceChart";
@@ -73,16 +73,19 @@ export default function Home() {
   const [mint_address, setMintAddress] = useState("");
   const [wsol_bundling, setWsolBundling] = useState(0);
   const [wsol_distribute, setWsolDistribute] = useState(0);
+  const [wallet_num, setWalletNum] = useState(0);
+  const [min_amount, setMinAmount] = useState(0);
+  const [max_amount, setMaxAmount] = useState(0);
   const store = useStore();
 
   const startSelling = async () => {
     store.set(tradingStateAtom, "selling");
     const all_wallets = await store.get(walletsForAllAtom);
-    const wallet_address = await store.get(walletAddressAtom);
+    const mint_address = await store.get(mintAddressAtom);
 
     // Wait until tradingStateAtom is "selling"
     await waitForCondition(() => store.get(tradingStateAtom) === "selling");
-    await Sell(wallet_address, all_wallets);
+    await Sell(mint_address, all_wallets, wallet);
   };
 
   const waitForCondition = async (condition: () => boolean, interval = 100) => {
@@ -98,16 +101,16 @@ export default function Home() {
   const startBuying = async () => {
     store.set(tradingStateAtom, "buying");
     const all_wallets = await store.get(walletsForAllAtom);
-    const wallet_address = await store.get(walletAddressAtom);
+    const mint_address = await store.get(mintAddressAtom);
     await waitForCondition(() => store.get(tradingStateAtom) === "buying");
-    await Buy(wallet_address, all_wallets);
+    await Buy(mint_address, all_wallets, min_amount, max_amount, wallet);
   };
 
   const totalSell = async () => {
     store.set(tradingStateAtom, "idle");
     const all_wallets = await store.get(walletsForAllAtom);
-    const wallet_address = await store.get(walletAddressAtom);
-    await Sell_Once(wallet_address, all_wallets);
+    const wallet_address = await store.get(mintAddressAtom);
+    await Sell_Once(wallet_address, all_wallets, wallet);
   };
 
   const connection = new Connection(
@@ -247,7 +250,13 @@ export default function Home() {
 
     // Show loading state
     if (wallet.publicKey && mint_address) {
-      await preprocess(wallet, mint_address, wsol_bundling, wsol_distribute);
+      await preprocess(
+        wallet,
+        mint_address,
+        wsol_bundling,
+        wsol_distribute,
+        wallet_num
+      );
       const bundle_wallets = await store.get(walletsForBundlingAtom);
       const all_wallets = await store.get(walletsForAllAtom);
       const tx = await initializeAndSwap({
@@ -549,16 +558,28 @@ export default function Home() {
 
                   <div className="space-y-4">
                     {/* Bundling Fee */}
-                    <div className="relative p-2 bg-transparent rounded-xl transition-all">
-                      <input
-                        type="number"
-                        onChange={(e) =>
-                          setJitoFee(new anchor.BN(e.target.value))
-                        }
-                        value={jito_fee === 0 ? "" : jito_fee}
-                        placeholder="💸 Bundling Fee to Jito (SOL: Lamport)"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
-                      />
+                    <div className="flex items-center space-x-4">
+                      <div className="relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) =>
+                            setJitoFee(new anchor.BN(e.target.value))
+                          }
+                          value={jito_fee === 0 ? "" : jito_fee}
+                          placeholder="💸 Bundling Fee to Jito (SOL: Lamport)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
+
+                      <div className="relative p-2 bg-transparent rounded-xl transition-all">
+                        <input
+                          type="number"
+                          onChange={(e) => setWalletNum(Number(e.target.value))}
+                          value={wallet_num === 0 ? "" : wallet_num}
+                          placeholder="🔑 Enter wallet number"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex space-x-4">
@@ -650,6 +671,36 @@ export default function Home() {
               </p>
 
               <RealTimePriceChart />
+
+              <div className="mt-6 flex items-center space-x-6">
+                <div className="flex flex-col">
+                  <label className="text-gray-600 text-sm font-semibold mb-1">
+                    Min Amount
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter min..."
+                    value={min_amount === 0 ? "" : min_amount}
+                    onChange={(e) => setMinAmount(Number(e.target.value))}
+                    className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
+      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-gray-600 text-sm font-semibold mb-1">
+                    Max Amount
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter max..."
+                    value={max_amount === 0 ? "" : max_amount}
+                    onChange={(e) => setMaxAmount(Number(e.target.value))}
+                    className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
+      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
 
               <div className="mt-6 flex space-x-6">
                 <button

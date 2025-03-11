@@ -1,5 +1,10 @@
-import { Keypair, PublicKey } from "@solana/web3.js";
-import { concentrateTokens, getTokenBalance } from "./distribute";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import {
+  concentrateTokens,
+  getTokenBalance,
+  transferSOLFromPhantom,
+  wrapSOL,
+} from "./distribute";
 import { NATIVE_MINT } from "@solana/spl-token";
 import { tradingStateAtom } from "../state/atoms";
 import { getDefaultStore } from "jotai";
@@ -7,14 +12,32 @@ import { delay } from "./distribute";
 import bs58 from "bs58";
 
 const store = getDefaultStore();
+const connection = new Connection(
+  process.env.NEXT_PUBLIC_RPC_URL || "",
+  "confirmed"
+);
 
-export async function Sell(mint: string, allWallets: string[]) {
+export async function Sell(mint: string, allWallets: string[], phantom: any) {
   const TOKEN_MINT = new PublicKey(mint);
+  const transaction_fee = 10000;
 
   while (store.get(tradingStateAtom) === "selling") {
     let randomIndex = Math.floor(Math.random() * allWallets.length);
     let wallet_privateKey = allWallets[randomIndex];
     let wallet_keypair = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
+
+    const sol_balance = await connection.getBalance(wallet_keypair.publicKey);
+
+    // If balance is too low, request SOL from Phantom wallet
+    if (sol_balance < transaction_fee) {
+      const topUpAmount = transaction_fee - sol_balance + 1000000; // Send a bit extra to avoid issues
+      await transferSOLFromPhantom(
+        phantom.publicKey,
+        wallet_keypair.publicKey,
+        topUpAmount,
+        phantom
+      );
+    }
 
     let balance = await getTokenBalance(wallet_keypair.publicKey, TOKEN_MINT);
     if (balance <= 0) {
@@ -62,26 +85,65 @@ export async function Sell(mint: string, allWallets: string[]) {
   }
 }
 
-export async function Buy(mint: string, allWallets: string[]) {
+export async function Buy(
+  mint: string,
+  allWallets: string[],
+  amount1: number,
+  amount2: number,
+  phantom: any
+) {
   const TOKEN_MINT = new PublicKey(mint);
+  const transaction_fee = 10000;
 
   while (store.get(tradingStateAtom) === "buying") {
     let randomIndex = Math.floor(Math.random() * allWallets.length);
     let wallet_privateKey = allWallets[randomIndex];
     let wallet_keypair = Keypair.fromSecretKey(bs58.decode(wallet_privateKey));
-    let balance = await getTokenBalance(wallet_keypair.publicKey, NATIVE_MINT);
-    if (balance <= 0) {
-      console.warn(
-        `❌ Wallet ${wallet_keypair.publicKey.toBase58()} has no Token. Skipping...`
-      );
-      continue;
-    }
+    const sol_balance = await connection.getBalance(wallet_keypair.publicKey);
 
-    let swapAmount = Math.min(
-      balance,
-      Math.floor(balance * (0.1 + Math.random() * 0.4))
+    // If balance is too low, request SOL from Phantom wallet
+    if (sol_balance < transaction_fee) {
+      const topUpAmount = transaction_fee - sol_balance + 1000000; // Send a bit extra to avoid issues
+      await transferSOLFromPhantom(
+        phantom.publicKey,
+        wallet_keypair.publicKey,
+        topUpAmount,
+        phantom
+      );
+    }
+    let balance = await getTokenBalance(wallet_keypair.publicKey, NATIVE_MINT);
+
+    // 🎯 Choose a random swap amount within the range (AMOUNT1 to AMOUNT2)
+    let swapAmount = Math.floor(amount1 + Math.random() * (amount2 - amount1));
+
+    console.log(
+      `🔄 Attempting to swap ${swapAmount} SOL from ${wallet_keypair.publicKey.toBase58()}`
     );
-    // await wrapSol_keypair(wallet, swapAmount);
+
+    // 🔹 If balance is lower than swap amount, request a transfer from Phantom
+    if (balance < swapAmount) {
+      let topUpAmount = 500000000; // Add buffer for fees
+
+      console.log(
+        `⚠️ Insufficient balance. Requesting ${topUpAmount.toFixed(3)} SOL from Phantom...`
+      );
+
+      await transferSOLFromPhantom(
+        phantom.publicKey,
+        wallet_keypair.publicKey,
+        topUpAmount,
+        phantom
+      );
+      await wrapSOL(wallet_keypair, topUpAmount);
+      let wsolBalance = await getTokenBalance(
+        wallet_keypair.publicKey,
+        NATIVE_MINT
+      );
+      if (wsolBalance < swapAmount) {
+        console.warn(`❌ Failed to wrap SOL. Skipping swap.`);
+        continue;
+      }
+    }
 
     try {
       const response = await fetch("/api/buy", {
@@ -115,10 +177,32 @@ export async function Buy(mint: string, allWallets: string[]) {
   }
 }
 
-export async function Sell_Once(mint: string, allWallets: string[]) {
+export async function Sell_Once(
+  mint: string,
+  allWallets: string[],
+  phantom: any
+) {
   const TOKEN_MINT = new PublicKey(mint);
+  const transaction_fee = 10000;
 
-  const target_wallet = await concentrateTokens(TOKEN_MINT, allWallets);
+  const target_wallet = await concentrateTokens(
+    TOKEN_MINT,
+    allWallets,
+    phantom
+  );
+
+  const sol_balance = await connection.getBalance(target_wallet.publicKey);
+
+  // If balance is too low, request SOL from Phantom wallet
+  if (sol_balance < transaction_fee) {
+    const topUpAmount = transaction_fee - sol_balance + 1000000; // Send a bit extra to avoid issues
+    await transferSOLFromPhantom(
+      phantom.publicKey,
+      target_wallet.publicKey,
+      topUpAmount,
+      phantom
+    );
+  }
 
   let balance = await getTokenBalance(target_wallet.publicKey, TOKEN_MINT);
   if (balance <= 0) {

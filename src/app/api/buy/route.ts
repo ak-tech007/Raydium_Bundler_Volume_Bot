@@ -9,8 +9,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    console.log(body)
-    
     // Validate request data
     if (!body.walletPrivateKey || !body.amount || !body.mint) {
       return NextResponse.json(
@@ -26,14 +24,14 @@ export async function POST(req: NextRequest) {
     const amount = new anchor.BN(BigInt(body.amount));
     const mint = body.mint;
 
-    // Execute the sell function
+    // Execute the buy function
     const txSignature = await buyCustomTokens(wallet, amount, mint);
 
     return NextResponse.json({ success: true, txSignature });
   } catch (error) {
-    console.error("Sell token error:", error);
+    console.error("Buy token error:", error);
     return NextResponse.json(
-      { error: "Failed to sell tokens", details: (error as Error).message },
+      { error: "Failed to buy tokens", details: (error as Error).message },
       { status: 500 }
     );
   }

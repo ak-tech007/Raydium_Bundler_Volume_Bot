@@ -13,6 +13,7 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   NATIVE_MINT,
+  getAccount,
 } from "@solana/spl-token";
 import { SendTransactionError } from "@solana/web3.js";
 import { Program } from "@project-serum/anchor";
@@ -156,7 +157,7 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
       await program.methods
         .initializeNewPool(
           new anchor.BN(initialAmount0),
-          new anchor.BN(initialAmount1),
+          new anchor.BN(BigInt(initialAmount1) * BigInt(10 ** 6)),
           open_time
         )
         .accounts({
@@ -219,6 +220,27 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
+    const inputTokenAccountInfo =
+      await connection.getAccountInfo(inputTokenAccount1);
+    if (!inputTokenAccountInfo) {
+      console.error("🚨 inputTokenAccount1 is not initialized!");
+    }
+
+    const poolStateInfo = await connection.getAccountInfo(poolState);
+    if (!poolStateInfo) {
+      throw new Error("🚨 Pool state account is NOT initialized!");
+    } else {
+      console.log("✅ Pool state is initialized:", poolStateInfo);
+    }
+    const poolStateData = await program.account.poolState.fetch(poolState);
+    console.log("🔍 Pool State Data:", poolStateData);
+    const vaultInfo = await connection.getAccountInfo(token0Vault);
+    if (!vaultInfo) {
+      console.error("🚨 Error: Vault account does NOT exist!");
+    }
+    const vaultAccountInfo = await getAccount(connection, token0Vault);
+    console.log("✅ Vault Balance:", vaultAccountInfo.amount.toString());
+
     const transaction_swap1 = new Transaction();
     transaction_swap1.add(
       await program.methods
@@ -261,14 +283,6 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
         signature1,
         "confirmed"
       );
-
-      if (confirmation.value.err) {
-        throw new Error(
-          `Transaction failed: ${JSON.stringify(confirmation.value.err)}`
-        );
-      }
-
-      console.log(`✅ Transaction Confirmed: ${signature1}`);
     } catch (error: any) {
       console.error("❌ Transaction Failed:", error);
 
@@ -410,8 +424,6 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
       token1Vault: token1Vault_publickey,
     });
 
-    await saveWalletsToFile();
-
     return signature3;
 
     // const jitoTipAddress = await getJitoTipAccount();
@@ -431,11 +443,11 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     //   await wallet.signTransaction(transaction_jitoTip);
 
     // const bunldeSentResult = await queryJitoBundles("sendBundle", [
-    //   bs58.encode(transaction_jitoTip_.serialize()),
+    //   bs58.encode(signedTransaction_init.serialize()),
     //   bs58.encode(transaction_swap1.serialize()),
     //   bs58.encode(transaction_swap2.serialize()),
     //   bs58.encode(transaction_swap3.serialize()),
-    //   bs58.encode(transaction_jitoTip.serialize()),
+    //   bs58.encode(transaction_jitoTip_.serialize()),
     // ]);
 
     // console.log(`✅ Bundle sent: ${bunldeSentResult?.result}`);
@@ -465,6 +477,7 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     //     console.log(
     //       `📝 Transactions: ${bundle?.result.value?.[0].transactions}`
     //     );
+
     //     return bundle?.result.value?.[0].transactions;
     //   }
 
@@ -474,8 +487,6 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     // } while (retryCount < maxRetries);
 
     // return "Failed";
-
-    // console.log(success);
   } catch (error) {
     if (error instanceof SendTransactionError) {
       console.error("Transaction failed:", error.message);
