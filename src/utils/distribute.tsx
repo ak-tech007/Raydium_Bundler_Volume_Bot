@@ -1,4 +1,5 @@
 import {
+  marketIdAtom,
   mintAddressAtom,
   vaultsAtom,
   walletsForAllAtom,
@@ -664,6 +665,7 @@ export const saveWalletsToFile = async () => {
     walletsForRemaining: store.get(walletsForRemainingAtom),
     vaults: store.get(vaultsAtom),
     mintAddress: store.get(mintAddressAtom),
+    marketId: store.get(marketIdAtom),
   };
 
   await fetch("/api/save-wallets", {

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     
     // Validate request data
-    if (!body.walletPrivateKey || !body.amount || !body.mint) {
+    if (!body.walletPrivateKey || !body.amount || !body.mint || !body.market_id) {
       return NextResponse.json(
         { error: "walletPrivateKey, amount, and mint are required" },
         { status: 400 }
@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
     );
     const amount = new anchor.BN(BigInt(body.amount));
     const mint = body.mint;
-
+    const market_id = body.market_id;
     // Execute the sell function
-    const txSignature = await sellCustomTokens(wallet, amount, mint);
+    const txSignature = await sellCustomTokens(wallet, amount, mint, market_id);
 
     return NextResponse.json({ success: true, txSignature });
   } catch (error) {

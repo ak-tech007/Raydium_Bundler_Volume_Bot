@@ -9,6 +9,6 @@ export async function GET() {
     const data = await readFile(filePath, "utf-8");
     return NextResponse.json(JSON.parse(data));
   } catch (error) {
-    return NextResponse.json({ walletsForBundling: [], walletsForAll: [], walletsForRemaining: [], vaults: { token0Vault: null, token1Vault: null } });
+    return NextResponse.json({ walletsForBundling: [], walletsForAll: [], walletsForRemaining: [],mintAddress: "", marketId: "", vaults: { token0Vault: null, token1Vault: null } });
   }
 }

@@ -1,230 +1,232 @@
 {
   "version": "0.1.0",
-  "name": "initialize_pool",
+  "name": "initialize_pool_amm",
   "instructions": [
     {
-      "name": "initializeNewPool",
+      "name": "initialize",
       "accounts": [
         {
-          "name": "cpSwapProgram",
+          "name": "ammProgram",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "creator",
+          "name": "amm",
           "isMut": true,
-          "isSigner": true,
-          "docs": ["Address paying to create the pool. Can be anyone"]
+          "isSigner": false
+        },
+        {
+          "name": "ammAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "ammOpenOrders",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammLpMint",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammCoinMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "ammPcMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "ammCoinVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammPcVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammTargetOrders",
+          "isMut": true,
+          "isSigner": false
         },
         {
           "name": "ammConfig",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["Which config the pool belongs to."]
-        },
-        {
-          "name": "authority",
-          "isMut": false,
           "isSigner": false
         },
         {
-          "name": "poolState",
+          "name": "createFeeDestination",
           "isMut": true,
           "isSigner": false
         },
         {
-          "name": "token0Mint",
+          "name": "marketProgram",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["Token_0 mint, the key must smaller then token_1 mint."]
+          "isSigner": false
         },
         {
-          "name": "token1Mint",
+          "name": "market",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["Token_1 mint, the key must grater then token_0 mint."]
+          "isSigner": false
         },
         {
-          "name": "lpMint",
+          "name": "userWallet",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "userTokenCoin",
           "isMut": true,
           "isSigner": false
         },
         {
-          "name": "creatorToken0",
-          "isMut": true,
-          "isSigner": false,
-          "docs": ["payer token0 account"]
-        },
-        {
-          "name": "creatorToken1",
-          "isMut": true,
-          "isSigner": false,
-          "docs": ["creator token1 account"]
-        },
-        {
-          "name": "creatorLpToken",
+          "name": "userTokenPc",
           "isMut": true,
           "isSigner": false
         },
         {
-          "name": "token0Vault",
+          "name": "userTokenLp",
           "isMut": true,
           "isSigner": false
         },
         {
-          "name": "token1Vault",
-          "isMut": true,
+          "name": "splToken",
+          "isMut": false,
           "isSigner": false
         },
         {
-          "name": "createPoolFee",
-          "isMut": true,
-          "isSigner": false,
-          "docs": ["create pool fee account"]
-        },
-        {
-          "name": "observationState",
-          "isMut": true,
+          "name": "splAssociatedTokenAccount",
+          "isMut": false,
           "isSigner": false
-        },
-        {
-          "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["Program to create mint account and mint tokens"]
-        },
-        {
-          "name": "token0Program",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["Spl token program or token program 2022"]
-        },
-        {
-          "name": "token1Program",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["Spl token program or token program 2022"]
-        },
-        {
-          "name": "associatedTokenProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["Program to create an ATA for receiving position NFT"]
         },
         {
           "name": "systemProgram",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["To create a new program account"]
+          "isSigner": false
         },
         {
           "name": "rent",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["Sysvar for program account"]
+          "isSigner": false
         }
       ],
       "args": [
         {
-          "name": "initAmount0",
-          "type": "u64"
-        },
-        {
-          "name": "initAmount1",
-          "type": "u64"
+          "name": "nonce",
+          "type": "u8"
         },
         {
           "name": "openTime",
+          "type": "u64"
+        },
+        {
+          "name": "initPcAmount",
+          "type": "u64"
+        },
+        {
+          "name": "initCoinAmount",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "swapBaseIn",
+      "name": "swapbasein",
       "accounts": [
         {
-          "name": "cpSwapProgram",
+          "name": "ammProgram",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "payer",
-          "isMut": false,
-          "isSigner": true,
-          "docs": ["The user performing the swap"]
+          "name": "ammPool",
+          "isMut": true,
+          "isSigner": false
         },
         {
-          "name": "authority",
+          "name": "ammAuthority",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "ammConfig",
+          "name": "ammOpenOrders",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammCoinVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammPcVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketProgram",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["The factory state to read protocol fees"]
+          "isSigner": false
         },
         {
-          "name": "poolState",
+          "name": "market",
           "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "The program account of the pool in which the swap will be performed"
-          ]
+          "isSigner": false
         },
         {
-          "name": "inputTokenAccount",
+          "name": "marketBids",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The user token account for input token"]
+          "isSigner": false
         },
         {
-          "name": "outputTokenAccount",
+          "name": "marketAsks",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The user token account for output token"]
+          "isSigner": false
         },
         {
-          "name": "inputVault",
+          "name": "marketEventQueue",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The vault token account for input token"]
+          "isSigner": false
         },
         {
-          "name": "outputVault",
+          "name": "marketCoinVault",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The vault token account for output token"]
+          "isSigner": false
         },
         {
-          "name": "inputTokenProgram",
+          "name": "marketPcVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketVaultSigner",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["SPL program for input token transfers"]
+          "isSigner": false
         },
         {
-          "name": "outputTokenProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["SPL program for output token transfers"]
-        },
-        {
-          "name": "inputTokenMint",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["The mint of input token"]
-        },
-        {
-          "name": "outputTokenMint",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["The mint of output token"]
-        },
-        {
-          "name": "observationState",
+          "name": "userTokenSource",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The program account for the most recent oracle observation"]
+          "isSigner": false
+        },
+        {
+          "name": "userTokenDestination",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userSourceOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "splToken",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -239,91 +241,97 @@
       ]
     },
     {
-      "name": "swapBaseOut",
+      "name": "swapbaseout",
       "accounts": [
         {
-          "name": "cpSwapProgram",
+          "name": "ammProgram",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "payer",
-          "isMut": false,
-          "isSigner": true,
-          "docs": ["The user performing the swap"]
+          "name": "ammPool",
+          "isMut": true,
+          "isSigner": false
         },
         {
-          "name": "authority",
+          "name": "ammAuthority",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "ammConfig",
+          "name": "ammOpenOrders",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammCoinVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ammPcVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketProgram",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["The factory state to read protocol fees"]
+          "isSigner": false
         },
         {
-          "name": "poolState",
+          "name": "market",
           "isMut": true,
-          "isSigner": false,
-          "docs": [
-            "The program account of the pool in which the swap will be performed"
-          ]
+          "isSigner": false
         },
         {
-          "name": "inputTokenAccount",
+          "name": "marketBids",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The user token account for input token"]
+          "isSigner": false
         },
         {
-          "name": "outputTokenAccount",
+          "name": "marketAsks",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The user token account for output token"]
+          "isSigner": false
         },
         {
-          "name": "inputVault",
+          "name": "marketEventQueue",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The vault token account for input token"]
+          "isSigner": false
         },
         {
-          "name": "outputVault",
+          "name": "marketCoinVault",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The vault token account for output token"]
+          "isSigner": false
         },
         {
-          "name": "inputTokenProgram",
+          "name": "marketPcVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketVaultSigner",
           "isMut": false,
-          "isSigner": false,
-          "docs": ["SPL program for input token transfers"]
+          "isSigner": false
         },
         {
-          "name": "outputTokenProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["SPL program for output token transfers"]
-        },
-        {
-          "name": "inputTokenMint",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["The mint of input token"]
-        },
-        {
-          "name": "outputTokenMint",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["The mint of output token"]
-        },
-        {
-          "name": "observationState",
+          "name": "userTokenSource",
           "isMut": true,
-          "isSigner": false,
-          "docs": ["The program account for the most recent oracle observation"]
+          "isSigner": false
+        },
+        {
+          "name": "userTokenDestination",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userSourceOwner",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "splToken",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -338,276 +346,7 @@
       ]
     }
   ],
-  "accounts": [
-    {
-      "name": "AmmConfig",
-      "docs": ["Holds the current owner of the factory"],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bump",
-            "docs": ["Bump to identify PDA"],
-            "type": "u8"
-          },
-          {
-            "name": "disableCreatePool",
-            "docs": ["Status to control if new pool can be create"],
-            "type": "bool"
-          },
-          {
-            "name": "index",
-            "docs": ["Config index"],
-            "type": "u16"
-          },
-          {
-            "name": "tradeFeeRate",
-            "docs": [
-              "The trade fee, denominated in hundredths of a bip (10^-6)"
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "protocolFeeRate",
-            "docs": ["The protocol fee"],
-            "type": "u64"
-          },
-          {
-            "name": "fundFeeRate",
-            "docs": [
-              "The fund fee, denominated in hundredths of a bip (10^-6)"
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "createPoolFee",
-            "docs": ["Fee for create a new pool"],
-            "type": "u64"
-          },
-          {
-            "name": "protocolOwner",
-            "docs": ["Address of the protocol fee owner"],
-            "type": "publicKey"
-          },
-          {
-            "name": "fundOwner",
-            "docs": ["Address of the fund fee owner"],
-            "type": "publicKey"
-          },
-          {
-            "name": "padding",
-            "docs": ["padding"],
-            "type": {
-              "array": ["u64", 16]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "ObservationState",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "initialized",
-            "docs": ["Whether the ObservationState is initialized"],
-            "type": "bool"
-          },
-          {
-            "name": "observationIndex",
-            "docs": [
-              "the most-recently updated index of the observations array"
-            ],
-            "type": "u16"
-          },
-          {
-            "name": "poolId",
-            "type": "publicKey"
-          },
-          {
-            "name": "observations",
-            "docs": ["observation array"],
-            "type": {
-              "array": [
-                {
-                  "defined": "Observation"
-                },
-                100
-              ]
-            }
-          },
-          {
-            "name": "padding",
-            "docs": ["padding for feature update"],
-            "type": {
-              "array": ["u64", 4]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "PoolState",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "ammConfig",
-            "docs": ["Which config the pool belongs"],
-            "type": "publicKey"
-          },
-          {
-            "name": "poolCreator",
-            "docs": ["pool creator"],
-            "type": "publicKey"
-          },
-          {
-            "name": "token0Vault",
-            "docs": ["Token A"],
-            "type": "publicKey"
-          },
-          {
-            "name": "token1Vault",
-            "docs": ["Token B"],
-            "type": "publicKey"
-          },
-          {
-            "name": "lpMint",
-            "docs": [
-              "Pool tokens are issued when A or B tokens are deposited.",
-              "Pool tokens can be withdrawn back to the original A or B token."
-            ],
-            "type": "publicKey"
-          },
-          {
-            "name": "token0Mint",
-            "docs": ["Mint information for token A"],
-            "type": "publicKey"
-          },
-          {
-            "name": "token1Mint",
-            "docs": ["Mint information for token B"],
-            "type": "publicKey"
-          },
-          {
-            "name": "token0Program",
-            "docs": ["token_0 program"],
-            "type": "publicKey"
-          },
-          {
-            "name": "token1Program",
-            "docs": ["token_1 program"],
-            "type": "publicKey"
-          },
-          {
-            "name": "observationKey",
-            "docs": ["observation account to store oracle data"],
-            "type": "publicKey"
-          },
-          {
-            "name": "authBump",
-            "type": "u8"
-          },
-          {
-            "name": "status",
-            "docs": [
-              "Bitwise representation of the state of the pool",
-              "bit0, 1: disable deposit(vaule is 1), 0: normal",
-              "bit1, 1: disable withdraw(vaule is 2), 0: normal",
-              "bit2, 1: disable swap(vaule is 4), 0: normal"
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "lpMintDecimals",
-            "type": "u8"
-          },
-          {
-            "name": "mint0Decimals",
-            "docs": ["mint0 and mint1 decimals"],
-            "type": "u8"
-          },
-          {
-            "name": "mint1Decimals",
-            "type": "u8"
-          },
-          {
-            "name": "lpSupply",
-            "docs": ["True circulating supply without burns and lock ups"],
-            "type": "u64"
-          },
-          {
-            "name": "protocolFeesToken0",
-            "docs": [
-              "The amounts of token_0 and token_1 that are owed to the liquidity provider."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "protocolFeesToken1",
-            "type": "u64"
-          },
-          {
-            "name": "fundFeesToken0",
-            "type": "u64"
-          },
-          {
-            "name": "fundFeesToken1",
-            "type": "u64"
-          },
-          {
-            "name": "openTime",
-            "docs": ["The timestamp allowed for swap in the pool."],
-            "type": "u64"
-          },
-          {
-            "name": "recentEpoch",
-            "docs": ["recent epoch"],
-            "type": "u64"
-          },
-          {
-            "name": "padding",
-            "docs": ["padding for future updates"],
-            "type": {
-              "array": ["u64", 31]
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "types": [
-    {
-      "name": "Observation",
-      "docs": ["The element of observations in ObservationState"],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "blockTimestamp",
-            "docs": ["The block timestamp of the observation"],
-            "type": "u64"
-          },
-          {
-            "name": "cumulativeToken0PriceX32",
-            "docs": [
-              "the cumulative of token0 price during the duration time, Q32.32, the remaining 64 bit for overflow"
-            ],
-            "type": "u128"
-          },
-          {
-            "name": "cumulativeToken1PriceX32",
-            "docs": [
-              "the cumulative of token1 price during the duration time, Q32.32, the remaining 64 bit for overflow"
-            ],
-            "type": "u128"
-          }
-        ]
-      }
-    }
-  ],
   "metadata": {
-    "address": "5nkUCxN2iFukZkE5yk2Z4HTxrPdwHZMmZskGzWcAfr1F"
+    "address": "DdHFxFR8mR8yVWwYhK9PHPTHTBJf1xQHTRMhEXGoJC1f"
   }
 }

@@ -17,7 +17,14 @@ const connection = new Connection(
   "confirmed"
 );
 
-export async function Sell(mint: string, allWallets: string[], phantom: any) {
+export async function Sell(
+  mint: string,
+  allWallets: string[],
+  amount1: number,
+  amount2: number,
+  phantom: any,
+  market_id: string
+) {
   const TOKEN_MINT = new PublicKey(mint);
   const transaction_fee = 10000;
 
@@ -40,17 +47,19 @@ export async function Sell(mint: string, allWallets: string[], phantom: any) {
     }
 
     let balance = await getTokenBalance(wallet_keypair.publicKey, TOKEN_MINT);
-    if (balance <= 0) {
+    // 🎯 Choose a random swap amount within the range (AMOUNT1 to AMOUNT2)
+    let swapAmount =
+      Math.floor(amount1 + Math.random() * (amount2 - amount1)) * 1000000;
+
+    console.log(
+      `🔄 Attempting to swap ${swapAmount} Token from ${wallet_keypair.publicKey.toBase58()}`
+    );
+    if (balance < swapAmount) {
       console.warn(
         `❌ Wallet ${wallet_keypair.publicKey.toBase58()} has no Token. Skipping...`
       );
       continue;
     }
-
-    let swapAmount = Math.min(
-      balance,
-      Math.floor(balance * (0.1 + Math.random() * 0.4))
-    );
 
     try {
       const response = await fetch("/api/sell", {
@@ -60,6 +69,7 @@ export async function Sell(mint: string, allWallets: string[], phantom: any) {
           walletPrivateKey: wallet_privateKey,
           amount: swapAmount,
           mint: mint,
+          market_id: market_id,
         }),
       });
 
@@ -90,7 +100,8 @@ export async function Buy(
   allWallets: string[],
   amount1: number,
   amount2: number,
-  phantom: any
+  phantom: any,
+  market_id: string
 ) {
   const TOKEN_MINT = new PublicKey(mint);
   const transaction_fee = 10000;
@@ -153,6 +164,7 @@ export async function Buy(
           walletPrivateKey: wallet_privateKey,
           amount: swapAmount,
           mint: mint,
+          market_id: market_id,
         }),
       });
       const result = await response.json();
@@ -180,10 +192,11 @@ export async function Buy(
 export async function Sell_Once(
   mint: string,
   allWallets: string[],
-  phantom: any
+  phantom: any,
+  market_id: string
 ) {
   const TOKEN_MINT = new PublicKey(mint);
-  const transaction_fee = 10000;
+  const transaction_fee = 1000000;
 
   const target_wallet = await concentrateTokens(
     TOKEN_MINT,
@@ -224,6 +237,7 @@ export async function Sell_Once(
         walletPrivateKey: wallet_secureKey,
         amount: swapAmount,
         mint: mint,
+        market_id: market_id,
       }),
     });
 

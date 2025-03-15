@@ -33,6 +33,7 @@ import {
   vaultsAtom,
   initializeStore,
   mintAddressAtom,
+  marketIdAtom,
 } from "../state/atoms";
 
 import RealTimePriceChart from "./_components/RealTimePriceChart";
@@ -76,16 +77,27 @@ export default function Home() {
   const [wallet_num, setWalletNum] = useState(0);
   const [min_amount, setMinAmount] = useState(0);
   const [max_amount, setMaxAmount] = useState(0);
+  const [sell_amount1, setSellAmount1] = useState(0);
+  const [sell_amount2, setSellAmount2] = useState(0);
+  const [market_id, setMarketId] = useState("");
   const store = useStore();
 
   const startSelling = async () => {
     store.set(tradingStateAtom, "selling");
     const all_wallets = await store.get(walletsForAllAtom);
     const mint_address = await store.get(mintAddressAtom);
+    const market_id = await store.get(marketIdAtom);
 
     // Wait until tradingStateAtom is "selling"
     await waitForCondition(() => store.get(tradingStateAtom) === "selling");
-    await Sell(mint_address, all_wallets, wallet);
+    await Sell(
+      mint_address,
+      all_wallets,
+      sell_amount1,
+      sell_amount2,
+      wallet,
+      market_id
+    );
   };
 
   const waitForCondition = async (condition: () => boolean, interval = 100) => {
@@ -102,15 +114,24 @@ export default function Home() {
     store.set(tradingStateAtom, "buying");
     const all_wallets = await store.get(walletsForAllAtom);
     const mint_address = await store.get(mintAddressAtom);
+    const market_id = await store.get(marketIdAtom);
     await waitForCondition(() => store.get(tradingStateAtom) === "buying");
-    await Buy(mint_address, all_wallets, min_amount, max_amount, wallet);
+    await Buy(
+      mint_address,
+      all_wallets,
+      min_amount,
+      max_amount,
+      wallet,
+      market_id
+    );
   };
 
   const totalSell = async () => {
     store.set(tradingStateAtom, "idle");
     const all_wallets = await store.get(walletsForAllAtom);
-    const wallet_address = await store.get(mintAddressAtom);
-    await Sell_Once(wallet_address, all_wallets, wallet);
+    const mint_address = await store.get(mintAddressAtom);
+    const market_id = await store.get(marketIdAtom);
+    await Sell_Once(mint_address, all_wallets, wallet, market_id);
   };
 
   const connection = new Connection(
@@ -269,6 +290,7 @@ export default function Home() {
         amount_out3: amount_out3,
         jito_fee: jito_fee,
         bundle_wallets_privatekey: bundle_wallets,
+        market_id: market_id,
       });
       setInitializeSwapPool(tx);
       await saveWalletsToFile();
@@ -484,6 +506,15 @@ export default function Home() {
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
                       />
                     </div>
+                    <div className="relative p-2 bg-transparent rounded-xl transition-all">
+                      <input
+                        type="text"
+                        value={market_id}
+                        onChange={(e) => setMarketId(e.target.value)}
+                        placeholder="🔗 Market ID for Token"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none text-black bg-gray-50 transition-all hover:border-green-500 placeholder-gray-500"
+                      />
+                    </div>
 
                     {/* Wrapped SOL & Token Inputs */}
                     <div className="flex space-x-4">
@@ -679,7 +710,7 @@ export default function Home() {
                   </label>
                   <input
                     type="number"
-                    placeholder="Enter min..."
+                    placeholder="Enter min for buy..."
                     value={min_amount === 0 ? "" : min_amount}
                     onChange={(e) => setMinAmount(Number(e.target.value))}
                     className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
@@ -693,9 +724,39 @@ export default function Home() {
                   </label>
                   <input
                     type="number"
-                    placeholder="Enter max..."
+                    placeholder="Enter max for buy..."
                     value={max_amount === 0 ? "" : max_amount}
                     onChange={(e) => setMaxAmount(Number(e.target.value))}
+                    className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
+      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center space-x-6">
+                <div className="flex flex-col">
+                  <label className="text-gray-600 text-sm font-semibold mb-1">
+                    Min Amount
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter min for sell..."
+                    value={sell_amount1 === 0 ? "" : sell_amount1}
+                    onChange={(e) => setSellAmount1(Number(e.target.value))}
+                    className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
+      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-gray-600 text-sm font-semibold mb-1">
+                    Max Amount
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter max for sell..."
+                    value={sell_amount2 === 0 ? "" : sell_amount2}
+                    onChange={(e) => setSellAmount2(Number(e.target.value))}
                     className="w-40 px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-900 bg-white 
       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   />

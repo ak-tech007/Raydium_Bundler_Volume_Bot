@@ -23,7 +23,8 @@ import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 import { delay, getTokenBalance, saveWalletsToFile } from "./distribute";
 const jitoUrl = process.env.NEXT_PUBLIC_JITO_URL;
 import { getDefaultStore } from "jotai";
-import { vaultsAtom } from "../state/atoms";
+import { marketIdAtom, vaultsAtom } from "../state/atoms";
+import { get_market } from "./market";
 const store = getDefaultStore();
 
 dotenv.config();
@@ -42,6 +43,7 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
   amount_out3: number;
   jito_fee: number;
   bundle_wallets_privatekey: string[];
+  market_id: string;
 }) => {
   const {
     wallet,
@@ -53,6 +55,7 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     amount_out3,
     jito_fee,
     bundle_wallets_privatekey,
+    market_id,
   } = InitialAndSwapDetails;
 
   let bundle_wallets: Keypair[] = [];
@@ -68,136 +71,178 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
   );
 
   const contractProgramId = new PublicKey(
-    "5nkUCxN2iFukZkE5yk2Z4HTxrPdwHZMmZskGzWcAfr1F"
+    "DdHFxFR8mR8yVWwYhK9PHPTHTBJf1xQHTRMhEXGoJC1f"
   );
   const program = new Program(idl as any, contractProgramId, provider);
 
   try {
-    // Define all the required accounts
-    const programId = new PublicKey(
-      "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
-    );
-    const creator = wallet.publicKey;
-    if (!creator) {
-      throw new Error("Wallet public key is null");
-    }
-
-    const ammConfig = await connection.getProgramAccounts(programId, {
-      filters: [{ dataSize: 236 }], // Data size of AmmConfig struct
-    });
-    if (ammConfig.length === 0) {
-      throw new Error("No ammConfig account found.");
-    }
-
-    const ammConfigAccount = ammConfig[0]; // Get the first account
-    const authority = await PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_and_lp_mint_auth_seed")],
-      programId
-    )[0];
-    const token0Mint = new PublicKey(
+    const RAYDIUM_PROGRAM_ID = new PublicKey(
+      "HWy1jotHpo6UqeQxx49dpYYdQB8wj9Qk9MdxwjLvDHB8"
+    ); // Replace with Raydium program ID
+    const OPENBOOK_PROGRAM_ID = new PublicKey(
+      "EoTcMgcDRTJVZDMZWBoU6rhYHZfkNTVEAfz3uUJRcYGj"
+    ); // Replace with OpenBook program ID
+    const MARKET_KEY = new PublicKey(market_id); // Replace with OpenBook market key
+    const COIN_MINT = new PublicKey(mint); // Replace with coin mint
+    const PC_MINT = new PublicKey(
       "So11111111111111111111111111111111111111112"
     );
-    const token1Mint = new PublicKey(mint);
-    const [poolState] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("pool", "utf-8"),
-        ammConfigAccount.pubkey.toBuffer(),
-        token0Mint.toBuffer(),
-        token1Mint.toBuffer(),
-      ],
-      programId
-    );
-    const [lpMint] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pool_lp_mint"), poolState.toBuffer()],
-      programId
-    );
-    const creatorToken0 = await getAssociatedTokenAddress(
-      token0Mint,
-      creator,
-      false,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-    const creatorToken1 = await getAssociatedTokenAddress(
-      token1Mint,
-      creator,
-      false,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-    const creatorLpToken = await getAssociatedTokenAddress(lpMint, creator);
-    const [token0Vault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pool_vault"), poolState.toBuffer(), token0Mint.toBuffer()],
-      programId
-    );
-    const [token1Vault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pool_vault"), poolState.toBuffer(), token1Mint.toBuffer()],
-      programId
-    );
 
-    const createPoolFee = new PublicKey(
-      "G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2"
+    const [ammPda, ammBump] = PublicKey.findProgramAddressSync(
+      [
+        RAYDIUM_PROGRAM_ID.toBuffer(),
+        MARKET_KEY.toBuffer(),
+        Buffer.from("amm_associated_seed"),
+      ],
+      RAYDIUM_PROGRAM_ID
     );
-    const [observationState] = PublicKey.findProgramAddressSync(
-      [Buffer.from("observation"), poolState.toBuffer()],
-      programId
+    const [ammAuthorityPda, ammAuthorityBump] =
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("amm authority")],
+        RAYDIUM_PROGRAM_ID
+      );
+    const [ammOpenOrdersPda, ammOpenOrdersbump] =
+      PublicKey.findProgramAddressSync(
+        [
+          RAYDIUM_PROGRAM_ID.toBuffer(),
+          MARKET_KEY.toBuffer(),
+          Buffer.from("open_order_associated_seed"),
+        ],
+        RAYDIUM_PROGRAM_ID
+      );
+    const [ammLpMintPda, ammLpMintbump] = PublicKey.findProgramAddressSync(
+      [
+        RAYDIUM_PROGRAM_ID.toBuffer(),
+        MARKET_KEY.toBuffer(),
+        Buffer.from("lp_mint_associated_seed"),
+      ],
+      RAYDIUM_PROGRAM_ID
+    );
+    const [ammCoinVaultPda, ammCoinVaultbump] =
+      PublicKey.findProgramAddressSync(
+        [
+          RAYDIUM_PROGRAM_ID.toBuffer(),
+          MARKET_KEY.toBuffer(),
+          Buffer.from("coin_vault_associated_seed"),
+        ],
+        RAYDIUM_PROGRAM_ID
+      );
+    const [ammPcVaultPda, ammPcVaultbump] = PublicKey.findProgramAddressSync(
+      [
+        RAYDIUM_PROGRAM_ID.toBuffer(),
+        MARKET_KEY.toBuffer(),
+        Buffer.from("pc_vault_associated_seed"),
+      ],
+      RAYDIUM_PROGRAM_ID
+    );
+    const [ammTargetOrdersPda, ammTargetOrdersbump] =
+      PublicKey.findProgramAddressSync(
+        [
+          RAYDIUM_PROGRAM_ID.toBuffer(),
+          MARKET_KEY.toBuffer(),
+          Buffer.from("target_associated_seed"),
+        ],
+        RAYDIUM_PROGRAM_ID
+      );
+    const [ammConfigPda, ammConfigbump] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("amm_config_account_seed"), // Seed from Rust account
+      ],
+      RAYDIUM_PROGRAM_ID
+    );
+    const CREATE_POOL_FEE_ADDRESS_PROGRAM_ID = new PublicKey(
+      "3XMrhbv989VxAMi3DErLV9eJht1pHppW5LbKxe9fkEFR"
+    );
+    const user_token_coin = await getAssociatedTokenAddress(
+      COIN_MINT,
+      wallet.publicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    const user_token_pc = await getAssociatedTokenAddress(
+      PC_MINT,
+      wallet.publicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    const user_token_lp = await getAssociatedTokenAddress(
+      ammLpMintPda,
+      wallet.publicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
     );
     const tokenProgram = TOKEN_PROGRAM_ID;
-    const token0Program = TOKEN_PROGRAM_ID;
-    const token1Program = TOKEN_PROGRAM_ID;
     const associatedTokenProgram = ASSOCIATED_TOKEN_PROGRAM_ID;
     const systemProgram = SystemProgram.programId;
     const rent = new PublicKey("SysvarRent111111111111111111111111111111111");
 
+    console.log(market_id);
+    const market_keys = await get_market(market_id);
+    console.log(market_keys);
+
+    const MARKET_BIDS_KEY = new PublicKey(market_keys.marketBids);
+    const MARKET_ASKS_KEY = new PublicKey(market_keys.marketAsks);
+    const MARKET_EVENT_QUEUE_KEY = new PublicKey(market_keys.marketEventQueue);
+    const MARKET_COIN_VAULT_KEY = new PublicKey(market_keys.marketCoinVault);
+    const MARKET_PC_VAULT_KEY = new PublicKey(market_keys.marketPcVault);
+    const MARKET_VAULT_SIGNER_KEY = new PublicKey(
+      market_keys.marketVaultSigner
+    );
+
     const open_time = new anchor.BN(Math.floor(Date.now() / 1000));
 
-    // Create and sign transactions
     const transaction_init = new Transaction();
     transaction_init.add(
       await program.methods
-        .initializeNewPool(
+        .initialize(
+          ammAuthorityBump,
+          open_time,
           new anchor.BN(initialAmount0),
-          new anchor.BN(BigInt(initialAmount1) * BigInt(10 ** 6)),
-          open_time
+          new anchor.BN(BigInt(initialAmount1) * BigInt(10 ** 6))
         )
         .accounts({
-          cpSwapProgram: programId,
-          creator: creator,
-          ammConfig: ammConfigAccount.pubkey,
-          authority: authority,
-          token0Mint: token0Mint,
-          token1Mint: token1Mint,
-          poolState: poolState,
-          lpMint: lpMint,
-          creatorToken0: creatorToken0,
-          creatorToken1: creatorToken1,
-          creatorLpToken: creatorLpToken,
-          token0Vault: token0Vault,
-          token1Vault: token1Vault,
-          createPoolFee: createPoolFee,
-          observationState: observationState,
-          tokenProgram: tokenProgram,
-          token0Program: token0Program,
-          token1Program: token1Program,
-          associatedTokenProgram: associatedTokenProgram,
+          ammProgram: RAYDIUM_PROGRAM_ID,
+          amm: ammPda,
+          ammAuthority: ammAuthorityPda,
+          ammOpenOrders: ammOpenOrdersPda,
+          ammLpMint: ammLpMintPda,
+          ammCoinMint: COIN_MINT,
+          ammPcMint: PC_MINT,
+          ammCoinVault: ammCoinVaultPda,
+          ammPcVault: ammPcVaultPda,
+          ammTargetOrders: ammTargetOrdersPda,
+          ammConfig: ammConfigPda,
+          createFeeDestination: CREATE_POOL_FEE_ADDRESS_PROGRAM_ID,
+          marketProgram: OPENBOOK_PROGRAM_ID,
+          market: MARKET_KEY,
+          userWallet: wallet.publicKey,
+          userTokenCoin: user_token_coin,
+          userTokenPc: user_token_pc,
+          userTokenLp: user_token_lp,
+          splToken: tokenProgram,
+          splAssociatedTokenAccount: associatedTokenProgram,
           systemProgram: systemProgram,
           rent: rent,
         })
         .instruction()
     );
+
     transaction_init.recentBlockhash = (
       await connection.getLatestBlockhash()
     ).blockhash;
     transaction_init.feePayer = wallet.publicKey;
+
     const signedTransaction_init =
       await wallet.signTransaction(transaction_init);
-
     const signature = await connection.sendRawTransaction(
       signedTransaction_init.serialize()
     );
     await connection.confirmTransaction(signature);
 
-    console.log("initializing pool signature", signature);
+    console.log("Pool initialized successfully. Signature:", signature);
 
     const max_amount_in_1 = await getTokenBalance(
       bundle_wallets[0].publicKey,
@@ -205,120 +250,84 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     );
     console.log("max_amount_in_1", max_amount_in_1);
 
-    const inputTokenAccount1 = await getAssociatedTokenAddress(
-      token0Mint,
+    const wallet1_token_coin = await getAssociatedTokenAddress(
+      COIN_MINT,
       bundle_wallets[0].publicKey,
       false,
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    const outputTokenAccount1 = await getAssociatedTokenAddress(
-      token1Mint,
+    const wallet1_token_pc = await getAssociatedTokenAddress(
+      PC_MINT,
       bundle_wallets[0].publicKey,
       false,
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-
-    const inputTokenAccountInfo =
-      await connection.getAccountInfo(inputTokenAccount1);
-    if (!inputTokenAccountInfo) {
-      console.error("🚨 inputTokenAccount1 is not initialized!");
-    }
-
-    const poolStateInfo = await connection.getAccountInfo(poolState);
-    if (!poolStateInfo) {
-      throw new Error("🚨 Pool state account is NOT initialized!");
-    } else {
-      console.log("✅ Pool state is initialized:", poolStateInfo);
-    }
-    const poolStateData = await program.account.poolState.fetch(poolState);
-    console.log("🔍 Pool State Data:", poolStateData);
-    const vaultInfo = await connection.getAccountInfo(token0Vault);
-    if (!vaultInfo) {
-      console.error("🚨 Error: Vault account does NOT exist!");
-    }
-    const vaultAccountInfo = await getAccount(connection, token0Vault);
-    console.log("✅ Vault Balance:", vaultAccountInfo.amount.toString());
 
     const transaction_swap1 = new Transaction();
     transaction_swap1.add(
       await program.methods
-        .swapBaseOut(
+        .swapbaseout(
           new anchor.BN(BigInt(max_amount_in_1)),
-          new anchor.BN(BigInt(amount_out1) * BigInt(10 ** 6))
+          new anchor.BN(BigInt(amount_out1))
         )
         .accounts({
-          cpSwapProgram: programId,
-          payer: bundle_wallets[0].publicKey,
-          authority: authority,
-          ammConfig: ammConfigAccount.pubkey,
-          poolState: poolState,
-          inputTokenAccount: inputTokenAccount1,
-          outputTokenAccount: outputTokenAccount1,
-          inputVault: token0Vault,
-          outputVault: token1Vault,
-          inputTokenProgram: token0Program,
-          outputTokenProgram: token1Program,
-          inputTokenMint: token0Mint,
-          outputTokenMint: token1Mint,
-          observationState: observationState,
+          ammProgram: RAYDIUM_PROGRAM_ID,
+          ammPool: ammPda,
+          ammAuthority: ammAuthorityPda,
+          ammOpenOrders: ammOpenOrdersPda,
+          ammCoinVault: ammCoinVaultPda,
+          ammPcVault: ammPcVaultPda,
+          marketProgram: OPENBOOK_PROGRAM_ID,
+          market: MARKET_KEY,
+          marketBids: MARKET_BIDS_KEY,
+          marketAsks: MARKET_ASKS_KEY,
+          marketEventQueue: MARKET_EVENT_QUEUE_KEY,
+          marketCoinVault: MARKET_COIN_VAULT_KEY,
+          marketPcVault: MARKET_PC_VAULT_KEY,
+          marketVaultSigner: MARKET_VAULT_SIGNER_KEY,
+          userTokenSource: wallet1_token_pc,
+          userTokenDestination: wallet1_token_coin,
+          userSourceOwner: bundle_wallets[0].publicKey,
+          splToken: tokenProgram,
         })
         .instruction()
     );
-    transaction_swap1.recentBlockhash = (
-      await connection.getLatestBlockhash()
-    ).blockhash;
+
+    const latestBlockhash = await connection.getLatestBlockhash();
+    transaction_swap1.recentBlockhash = latestBlockhash.blockhash;
     transaction_swap1.feePayer = bundle_wallets[0].publicKey;
-    try {
-      transaction_swap1.sign(bundle_wallets[0]);
-      const signature1 = await connection.sendRawTransaction(
-        transaction_swap1.serialize()
-      );
 
-      console.log(`✅ Transaction Sent: ${signature1}`);
+    await transaction_swap1.sign(bundle_wallets[0]);
 
-      // Wait for confirmation
-      const confirmation = await connection.confirmTransaction(
-        signature1,
-        "confirmed"
-      );
-    } catch (error: any) {
-      console.error("❌ Transaction Failed:", error);
+    const signature_swap1 = await connection.sendRawTransaction(
+      transaction_swap1.serialize(),
+      { skipPreflight: false, preflightCommitment: "processed" }
+    );
 
-      // Check if the error contains logs
-      if (error.logs) {
-        console.error("🔍 Logs:", error.logs);
-      }
+    const confirmation = await connection.confirmTransaction(
+      signature_swap1,
+      "confirmed"
+    );
 
-      if (error.message.includes("Simulation failed")) {
-        console.error(
-          "⚠️ Transaction simulation failed. Check if the wallet has enough balance."
-        );
-      }
-
-      if (error.message.includes("0x1770")) {
-        console.error(
-          "🚨 Error 0x1770: SwapBaseOut transaction was not approved."
-        );
-      }
-    }
+    console.log("Swap1 success. Signature:", signature_swap1);
 
     const max_amount_in_2 = await getTokenBalance(
       bundle_wallets[1].publicKey,
       NATIVE_MINT
     );
-
     console.log("max_amount_in_2", max_amount_in_2);
-    const inputTokenAccount2 = await getAssociatedTokenAddress(
-      token0Mint,
+
+    const wallet2_token_coin = await getAssociatedTokenAddress(
+      COIN_MINT,
       bundle_wallets[1].publicKey,
       false,
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    const outputTokenAccount2 = await getAssociatedTokenAddress(
-      token1Mint,
+    const wallet2_token_pc = await getAssociatedTokenAddress(
+      PC_MINT,
       bundle_wallets[1].publicKey,
       false,
       TOKEN_PROGRAM_ID,
@@ -328,53 +337,61 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     const transaction_swap2 = new Transaction();
     transaction_swap2.add(
       await program.methods
-        .swapBaseOut(
+        .swapbaseout(
           new anchor.BN(BigInt(max_amount_in_2)),
-          new anchor.BN(BigInt(amount_out2) * BigInt(10 ** 6))
+          new anchor.BN(BigInt(amount_out2))
         )
         .accounts({
-          cpSwapProgram: programId,
-          payer: bundle_wallets[1].publicKey,
-          authority: authority,
-          ammConfig: ammConfigAccount.pubkey,
-          poolState: poolState,
-          inputTokenAccount: inputTokenAccount2,
-          outputTokenAccount: outputTokenAccount2,
-          inputVault: token0Vault,
-          outputVault: token1Vault,
-          inputTokenProgram: token0Program,
-          outputTokenProgram: token1Program,
-          inputTokenMint: token0Mint,
-          outputTokenMint: token1Mint,
-          observationState: observationState,
+          ammProgram: RAYDIUM_PROGRAM_ID,
+          ammPool: ammPda,
+          ammAuthority: ammAuthorityPda,
+          ammOpenOrders: ammOpenOrdersPda,
+          ammCoinVault: ammCoinVaultPda,
+          ammPcVault: ammPcVaultPda,
+          marketProgram: OPENBOOK_PROGRAM_ID,
+          market: MARKET_KEY,
+          marketBids: MARKET_BIDS_KEY,
+          marketAsks: MARKET_ASKS_KEY,
+          marketEventQueue: MARKET_EVENT_QUEUE_KEY,
+          marketCoinVault: MARKET_COIN_VAULT_KEY,
+          marketPcVault: MARKET_PC_VAULT_KEY,
+          marketVaultSigner: MARKET_VAULT_SIGNER_KEY,
+          userTokenSource: wallet2_token_pc,
+          userTokenDestination: wallet2_token_coin,
+          userSourceOwner: bundle_wallets[1].publicKey,
+          splToken: tokenProgram,
         })
         .instruction()
     );
+
     transaction_swap2.recentBlockhash = (
       await connection.getLatestBlockhash()
     ).blockhash;
     transaction_swap2.feePayer = bundle_wallets[1].publicKey;
+
     transaction_swap2.sign(bundle_wallets[1]);
-    const signature2 = await connection.sendRawTransaction(
+    const signature_swap2 = await connection.sendRawTransaction(
       transaction_swap2.serialize()
     );
-    await connection.confirmTransaction(signature2);
+    await connection.confirmTransaction(signature_swap2);
+
+    console.log("Swap1 success. Signature:", signature_swap2);
 
     const max_amount_in_3 = await getTokenBalance(
       bundle_wallets[2].publicKey,
       NATIVE_MINT
     );
-
     console.log("max_amount_in_3", max_amount_in_3);
-    const inputTokenAccount3 = await getAssociatedTokenAddress(
-      token0Mint,
+
+    const wallet3_token_coin = await getAssociatedTokenAddress(
+      COIN_MINT,
       bundle_wallets[2].publicKey,
       false,
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    const outputTokenAccount3 = await getAssociatedTokenAddress(
-      token1Mint,
+    const wallet3_token_pc = await getAssociatedTokenAddress(
+      PC_MINT,
       bundle_wallets[2].publicKey,
       false,
       TOKEN_PROGRAM_ID,
@@ -384,47 +401,56 @@ export const initializeAndSwap = async (InitialAndSwapDetails: {
     const transaction_swap3 = new Transaction();
     transaction_swap3.add(
       await program.methods
-        .swapBaseOut(
+        .swapbaseout(
           new anchor.BN(BigInt(max_amount_in_3)),
-          new anchor.BN(BigInt(amount_out3) * BigInt(10 ** 6))
+          new anchor.BN(BigInt(amount_out3))
         )
         .accounts({
-          cpSwapProgram: programId,
-          payer: bundle_wallets[2].publicKey,
-          authority: authority,
-          ammConfig: ammConfigAccount.pubkey,
-          poolState: poolState,
-          inputTokenAccount: inputTokenAccount3,
-          outputTokenAccount: outputTokenAccount3,
-          inputVault: token0Vault,
-          outputVault: token1Vault,
-          inputTokenProgram: token0Program,
-          outputTokenProgram: token1Program,
-          inputTokenMint: token0Mint,
-          outputTokenMint: token1Mint,
-          observationState: observationState,
+          ammProgram: RAYDIUM_PROGRAM_ID,
+          ammPool: ammPda,
+          ammAuthority: ammAuthorityPda,
+          ammOpenOrders: ammOpenOrdersPda,
+          ammCoinVault: ammCoinVaultPda,
+          ammPcVault: ammPcVaultPda,
+          marketProgram: OPENBOOK_PROGRAM_ID,
+          market: MARKET_KEY,
+          marketBids: MARKET_BIDS_KEY,
+          marketAsks: MARKET_ASKS_KEY,
+          marketEventQueue: MARKET_EVENT_QUEUE_KEY,
+          marketCoinVault: MARKET_COIN_VAULT_KEY,
+          marketPcVault: MARKET_PC_VAULT_KEY,
+          marketVaultSigner: MARKET_VAULT_SIGNER_KEY,
+          userTokenSource: wallet3_token_pc,
+          userTokenDestination: wallet3_token_coin,
+          userSourceOwner: bundle_wallets[2].publicKey,
+          splToken: tokenProgram,
         })
         .instruction()
     );
+
     transaction_swap3.recentBlockhash = (
       await connection.getLatestBlockhash()
     ).blockhash;
     transaction_swap3.feePayer = bundle_wallets[2].publicKey;
+
     transaction_swap3.sign(bundle_wallets[2]);
-    const signature3 = await connection.sendRawTransaction(
+    const signature_swap3 = await connection.sendRawTransaction(
       transaction_swap3.serialize()
     );
-    await connection.confirmTransaction(signature3);
+    await connection.confirmTransaction(signature_swap3);
 
-    const token0Vault_publickey = token0Vault.toBase58();
-    const token1Vault_publickey = token1Vault.toBase58();
+    console.log("Swap1 success. Signature:", signature_swap3);
+
+    const token0Vault_publickey = ammPcVaultPda.toBase58();
+    const token1Vault_publickey = ammCoinVaultPda.toBase58();
 
     store.set(vaultsAtom, {
       token0Vault: token0Vault_publickey,
       token1Vault: token1Vault_publickey,
     });
+    store.set(marketIdAtom, market_id);
 
-    return signature3;
+    return signature_swap3;
 
     // const jitoTipAddress = await getJitoTipAccount();
 
